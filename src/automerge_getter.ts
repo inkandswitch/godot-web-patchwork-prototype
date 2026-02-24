@@ -1,35 +1,33 @@
-
-import { serializeGodotSceneAsUint8Array } from "./godot_serializer"
+import { serializeGodotSceneAsUint8Array } from "./godot_serializer";
 // import zip library
 import JSZip from "jszip";
 // const SERVER_URL = "104.131.179.247:8080"
-const SERVER_URL = "24.199.97.236:3000"
+const SERVER_URL = "24.199.97.236:3000";
 
-const DOC_FETCH_URL = `http://${SERVER_URL}/doc/[docId]`
-
+const DOC_FETCH_URL = `http://${SERVER_URL}/doc/[docId]`;
 
 export async function getDoc(docId: string): Promise<any> {
-    try {
-        var doc = await fetch(DOC_FETCH_URL.replace('[docId]', docId));
-        var docJson = await doc.json();
-    } catch (e) {
-        console.error("Error getting doc: ", docId);
-        console.error(e);
-        return null;
-    }
-    return docJson;
+  try {
+    var doc = await fetch(DOC_FETCH_URL.replace("[docId]", docId));
+    var docJson = await doc.json();
+  } catch (e) {
+    console.error("Error getting doc: ", docId);
+    console.error(e);
+    return null;
+  }
+  return docJson;
 }
 
 // returns a map of file name to content
 export async function getBranchFiles(projectId: string, branchId?: string): Promise<Map<string, Uint8Array>> {
-    var map = new Map<string, Uint8Array>();
-    // get the branch metadata doc from the server
-    // looks like this:
-    //{"branches":{"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke":{"fork_info":null,"id":"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke","merge_info":null,"name":"main"}},"main_doc_id":"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke"}
-    // we need to get the main_doc_id
-    // then we need to get the main doc id from the server
-    // looks like this:
-    /**
+  var map = new Map<string, Uint8Array>();
+  // get the branch metadata doc from the server
+  // looks like this:
+  //{"branches":{"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke":{"fork_info":null,"id":"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke","merge_info":null,"name":"main"}},"main_doc_id":"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke"}
+  // we need to get the main_doc_id
+  // then we need to get the main doc id from the server
+  // looks like this:
+  /**
      ```
      {
         "files": {
@@ -62,47 +60,45 @@ export async function getBranchFiles(projectId: string, branchId?: string): Prom
     // return the map
      */
 
+  // get the branch metadata doc
 
-    // get the branch metadata doc
+  var branchMetadata = await getDoc(projectId);
 
-    var branchMetadata = await getDoc(projectId);
+  branchId = branchId ?? branchMetadata.main_doc_id;
 
-    branchId = branchId ?? branchMetadata.main_doc_id;
+  var mainDoc = await getDoc(branchId!);
 
-    var mainDoc = await getDoc(branchId!);
+  for (const entry of Object.entries(mainDoc.files)) {
+    const filename: string = entry[0];
+    const fileData: any = entry[1];
 
-
-    for (const entry of Object.entries(mainDoc.files)) {
-        const filename: string = entry[0];
-        const fileData: any = entry[1];
-
-        if (fileData.content) {
-            map.set(filename, new TextEncoder().encode(fileData.content));
-        } else if (fileData.url) {
-            var subDocId: string = fileData.url.split(':')[1];
-            var subDoc = await getDoc(subDocId);
-            // content is an Array, we need to convert it to a uint8array
-            var content: Uint8Array = new Uint8Array(subDoc.content);
-            map.set(filename, content);
-        } else if (fileData.structured_content) {
-            var content: Uint8Array = serializeGodotSceneAsUint8Array(fileData.structured_content);
-            map.set(filename, content);
-        }
+    if (fileData.content) {
+      map.set(filename, new TextEncoder().encode(fileData.content));
+    } else if (fileData.url) {
+      var subDocId: string = fileData.url.split(":")[1];
+      var subDoc = await getDoc(subDocId);
+      // content is an Array, we need to convert it to a uint8array
+      var content: Uint8Array = new Uint8Array(subDoc.content);
+      map.set(filename, content);
+    } else if (fileData.structured_content) {
+      var content: Uint8Array = serializeGodotSceneAsUint8Array(fileData.structured_content);
+      map.set(filename, content);
     }
-    return map;
+  }
+  return map;
 }
 
 export async function getBranchFilesAsZip(projectId: string, branchId?: string): Promise<ArrayBuffer> {
-    var zip = new JSZip();
-    var map = await getBranchFiles(projectId, branchId);
-    for (const [filename, content] of map.entries()) {
-        zip.file(filename.replace("res://", ""), content);
-    }
-    return (await zip.generateAsync({ type: "blob" })).arrayBuffer();
+  var zip = new JSZip();
+  var map = await getBranchFiles(projectId, branchId);
+  for (const [filename, content] of map.entries()) {
+    zip.file(filename.replace("res://", ""), content);
+  }
+  return (await zip.generateAsync({ type: "blob" })).arrayBuffer();
 }
 
 // function test() {
-//   //to2i9YGkdhXy3Li4K7FoUSQ9Yzv
+//   to2i9YGkdhXy3Li4K7FoUSQ9Yzv
 //   getBranchFiles("to2i9YGkdhXy3Li4K7FoUSQ9Yzv").then((map) => {
 //     console.log(map);
 //   });
