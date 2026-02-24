@@ -1,25 +1,28 @@
 import { serializeGodotSceneAsUint8Array } from "./godot_serializer";
 // import zip library
 import JSZip from "jszip";
-// const SERVER_URL = "104.131.179.247:8080"
-const SERVER_URL = "24.199.97.236:3000";
-
-const DOC_FETCH_URL = `http://${SERVER_URL}/doc/[docId]`;
+const DOC_FETCH_URL = `/api/doc/[docId]`;
 
 export async function getDoc(docId: string): Promise<any> {
+  const url = DOC_FETCH_URL.replace("[docId]", docId);
+  console.log(`[getDoc] fetching ${url}`);
   try {
-    var doc = await fetch(DOC_FETCH_URL.replace("[docId]", docId));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    var doc = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    console.log(`[getDoc] response ${doc.status} for ${docId}`);
     var docJson = await doc.json();
+    console.log(`[getDoc] parsed JSON for ${docId}`);
   } catch (e) {
-    console.error("Error getting doc: ", docId);
-    console.error(e);
+    console.error("[getDoc] Error getting doc: ", docId, e);
     return null;
   }
   return docJson;
 }
 
 // returns a map of file name to content
-export async function getBranchFiles(projectId: string, branchId?: string): Promise<Map<string, Uint8Array>> {
+export async function getBranchFiles(projectId: string, branchId?: string, onProgress?: (current: number, total: number) => void): Promise<Map<string, Uint8Array>> {
   var map = new Map<string, Uint8Array>();
   // get the branch metadata doc from the server
   // looks like this:
@@ -62,29 +65,63 @@ export async function getBranchFiles(projectId: string, branchId?: string): Prom
 
   // get the branch metadata doc
 
+  console.log(`[getBranchFiles] fetching branch metadata for ${projectId}`);
   var branchMetadata = await getDoc(projectId);
+  if (!branchMetadata) {
+    throw new Error(`Could not load project "${projectId}"`);
+  }
+  console.log("[getBranchFiles] branch metadata:", branchMetadata);
 
   branchId = branchId ?? branchMetadata.main_doc_id;
 
+  console.log(`[getBranchFiles] fetching main doc ${branchId}`);
   var mainDoc = await getDoc(branchId!);
+  if (!mainDoc?.files) {
+    throw new Error(`Could not load project data — the project may be empty or corrupted.`);
+  }
+  console.log(`[getBranchFiles] main doc has ${Object.keys(mainDoc.files).length} files`);
 
-  for (const entry of Object.entries(mainDoc.files)) {
-    const filename: string = entry[0];
-    const fileData: any = entry[1];
+  const entries = Object.entries(mainDoc.files);
+  console.log(`Processing ${entries.length} files`);
 
+  // Process text and scene files immediately, collect binary fetches
+  const pending: Promise<void>[] = [];
+  let completed = 0;
+  const CONCURRENCY = 10;
+  let running = 0;
+
+  for (const [filename, fileData] of entries as [string, any][]) {
     if (fileData.content) {
       map.set(filename, new TextEncoder().encode(fileData.content));
+      completed++;
+      onProgress?.(completed, entries.length);
     } else if (fileData.url) {
-      var subDocId: string = fileData.url.split(":")[1];
-      var subDoc = await getDoc(subDocId);
-      // content is an Array, we need to convert it to a uint8array
-      var content: Uint8Array = new Uint8Array(subDoc.content);
-      map.set(filename, content);
+      const task = async () => {
+        while (running >= CONCURRENCY) {
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        running++;
+        try {
+          const subDocId: string = fileData.url.split(":")[1];
+          console.log(`[fetch] ${filename}`);
+          const subDoc = await getDoc(subDocId);
+          map.set(filename, new Uint8Array(subDoc.content));
+        } finally {
+          running--;
+          completed++;
+          onProgress?.(completed, entries.length);
+        }
+      };
+      pending.push(task());
     } else if (fileData.structured_content) {
-      var content: Uint8Array = serializeGodotSceneAsUint8Array(fileData.structured_content);
-      map.set(filename, content);
+      map.set(filename, serializeGodotSceneAsUint8Array(fileData.structured_content));
+      completed++;
+      onProgress?.(completed, entries.length);
     }
   }
+
+  await Promise.all(pending);
+  console.log(`All ${entries.length} files processed`);
   return map;
 }
 
