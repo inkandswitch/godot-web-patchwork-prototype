@@ -84,6 +84,10 @@ const PERSISTENT_PATHS = ["/home/web_user"];
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 const concurrency = clamp(navigator.hardwareConcurrency ?? 1, 12, 24);
 
+function importCacheKey(projectId: string, branchId: string) {
+  return `patchwork:imported:${projectId}:${branchId}`;
+}
+
 const params = new URLSearchParams(window.location.search);
 const branchSelect = document.getElementById("branch-select") as HTMLSelectElement;
 const topBar = document.getElementById("top-bar")!;
@@ -161,21 +165,8 @@ async function launch() {
   setupBranchPicker(metadata, branchId);
   topBar.style.display = "flex";
 
-  loading.style.display = "flex";
-  setStatus("Downloading project files");
-  setIndeterminate();
-
-  console.time("fetch-project-files");
-  const files = await getBranchFiles(branchId, (current, total) => {
-    setProgress(current / total);
-  });
-  console.timeEnd("fetch-project-files");
-  console.log(`Fetched ${files.size} files`);
-
-  // Step 1: import project via editor pass (loading overlay hides the canvas)
-  setStatus("Importing project");
-  setIndeterminate();
-  console.time("import-pass");
+  const cacheKey = importCacheKey(projectId!, branchId);
+  const alreadyImported = localStorage.getItem(cacheKey) === "1";
 
   let canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
@@ -188,35 +179,59 @@ async function launch() {
     return fresh;
   }
 
-  await new Promise<void>((resolve) => {
-    const importEngine = new window.Engine({
-      canvas,
-      canvasResizePolicy: 0,
-      unloadAfterInit: false,
-      persistentPaths: PERSISTENT_PATHS,
-      emscriptenPoolSize: concurrency,
-      godotPoolSize: Math.floor(concurrency / 3),
-      onExit: () => {
-        replaceCanvas();
-        resolve();
-      },
-    });
+  if (!alreadyImported) {
+    loading.style.display = "flex";
+    setStatus("Downloading project files");
+    setIndeterminate();
 
-    importEngine.init("godot.editor").then(() => {
-      for (const [filename, content] of files.entries()) {
-        importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content);
-      }
-      setStatus("Importing project");
-      importEngine.start({
-        args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "-e", "--quit"],
-        persistentDrops: false,
+    console.time("fetch-project-files");
+    const files = await getBranchFiles(branchId, (current, total) => {
+      setProgress(current / total);
+    });
+    console.timeEnd("fetch-project-files");
+    console.log(`Fetched ${files.size} files`);
+
+    // Import pass: run editor with -e --quit to process assets
+    setStatus("Importing project");
+    setIndeterminate();
+    console.time("import-pass");
+
+    await new Promise<void>((resolve) => {
+      const importEngine = new window.Engine({
+        canvas,
+        canvasResizePolicy: 0,
+        unloadAfterInit: false,
+        persistentPaths: PERSISTENT_PATHS,
+        emscriptenPoolSize: concurrency,
+        godotPoolSize: Math.floor(concurrency / 3),
+        onExit: () => {
+          replaceCanvas();
+          resolve();
+        },
+      });
+
+      importEngine.init("godot.editor").then(() => {
+        for (const [filename, content] of files.entries()) {
+          importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content);
+        }
+        importEngine.start({
+          args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "-e", "--quit"],
+          persistentDrops: false,
+        });
       });
     });
-  });
 
-  console.timeEnd("import-pass");
+    console.timeEnd("import-pass");
 
-  // Step 2: run the game on a fresh canvas
+    // Mark as imported and reload so IndexedDB data is cleanly available
+    localStorage.setItem(cacheKey, "1");
+    console.log("[patchwork] import complete, reloading…");
+    window.location.reload();
+    return;
+  }
+
+  // Already imported — go straight to the game
+  loading.style.display = "flex";
   setStatus("Starting game");
   setIndeterminate();
   console.time("game-start");
@@ -238,6 +253,9 @@ async function launch() {
     args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3"],
     canvas,
   });
+
+  // Clear the import cache so a manual reload will re-import
+  localStorage.removeItem(cacheKey);
 
   console.timeEnd("game-start");
   console.timeEnd("total");
