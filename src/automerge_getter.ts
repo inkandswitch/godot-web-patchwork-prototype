@@ -1,7 +1,7 @@
 import { serializeGodotSceneAsUint8Array } from "./godot_serializer";
 // import zip library
 import JSZip from "jszip";
-const DOC_FETCH_URL = `/api/doc/[docId]`;
+const DOC_FETCH_URL = `http://24.199.97.236:3000/doc/[docId]`;
 
 export async function getDoc(docId: string): Promise<any> {
   const url = DOC_FETCH_URL.replace("[docId]", docId);

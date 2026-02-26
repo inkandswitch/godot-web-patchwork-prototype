@@ -38,7 +38,7 @@ async function showError(msg: string) {
   try {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 5000);
-    const res = await fetch("/api/", { signal: controller.signal });
+    const res = await fetch("http://24.199.97.236:3000/", { signal: controller.signal });
     serverReachable = res.ok;
   } catch {}
 
@@ -64,8 +64,19 @@ async function showError(msg: string) {
 const projectId = new URLSearchParams(window.location.search).get("project");
 console.log("[patchwork] project id from URL:", projectId);
 if (!projectId) {
-  showError("Missing ?project= parameter in URL");
-  throw new Error("Missing ?project= parameter");
+  const prompt = document.getElementById("project-prompt")!;
+  prompt.style.display = "flex";
+  document.getElementById("project-form")!.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = document.getElementById("project-input") as HTMLInputElement;
+    const id = input.value.trim();
+    if (id) {
+      const p = new URLSearchParams(window.location.search);
+      p.set("project", id);
+      window.location.search = p.toString();
+    }
+  });
+  throw new Error("No project ID");
 }
 
 const PROJECT_PATH = "/home/web_user/project";
