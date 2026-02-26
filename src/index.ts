@@ -197,6 +197,24 @@ async function launch() {
     console.time("import-pass");
 
     await new Promise<void>((resolve) => {
+      let resolved = false;
+      const done = () => {
+        if (resolved) return;
+        resolved = true;
+        replaceCanvas();
+        resolve();
+      };
+
+      // Timeout: if the editor hangs (audio/network errors on deployed builds),
+      // the import data is already in the persistent FS by this point.
+      const IMPORT_TIMEOUT_MS = 60_000;
+      setTimeout(() => {
+        if (!resolved) {
+          console.warn(`[patchwork] import pass timed out after ${IMPORT_TIMEOUT_MS / 1000}s, proceeding anyway`);
+          done();
+        }
+      }, IMPORT_TIMEOUT_MS);
+
       const importEngine = new window.Engine({
         canvas,
         canvasResizePolicy: 0,
@@ -204,10 +222,7 @@ async function launch() {
         persistentPaths: PERSISTENT_PATHS,
         emscriptenPoolSize: concurrency,
         godotPoolSize: Math.floor(concurrency / 3),
-        onExit: () => {
-          replaceCanvas();
-          resolve();
-        },
+        onExit: done,
       });
 
       importEngine.init("godot.editor").then(() => {
@@ -215,7 +230,7 @@ async function launch() {
           importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content);
         }
         importEngine.start({
-          args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "-e", "--quit"],
+          args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "--audio-driver", "Dummy", "-e", "--quit"],
           persistentDrops: false,
         });
       });
