@@ -84,10 +84,6 @@ const PERSISTENT_PATHS = ["/home/web_user"];
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 const concurrency = clamp(navigator.hardwareConcurrency ?? 1, 12, 24);
 
-function importCacheKey(projectId: string, branchId: string) {
-  return `patchwork:imported:${projectId}:${branchId}`;
-}
-
 const params = new URLSearchParams(window.location.search);
 const branchSelect = document.getElementById("branch-select") as HTMLSelectElement;
 const topBar = document.getElementById("top-bar")!;
@@ -165,9 +161,6 @@ async function launch() {
   setupBranchPicker(metadata, branchId);
   topBar.style.display = "flex";
 
-  const cacheKey = importCacheKey(projectId!, branchId);
-  const alreadyImported = localStorage.getItem(cacheKey) === "1";
-
   let canvas = document.getElementById("canvas") as HTMLCanvasElement;
 
   function replaceCanvas(): HTMLCanvasElement {
@@ -179,74 +172,61 @@ async function launch() {
     return fresh;
   }
 
-  if (!alreadyImported) {
-    loading.style.display = "flex";
-    setStatus("Downloading project files");
-    setIndeterminate();
-
-    console.time("fetch-project-files");
-    const files = await getBranchFiles(branchId, (current, total) => {
-      setProgress(current / total);
-    });
-    console.timeEnd("fetch-project-files");
-    console.log(`Fetched ${files.size} files`);
-
-    // Import pass: run editor with -e --quit to process assets
-    setStatus("Importing project");
-    setIndeterminate();
-    console.time("import-pass");
-
-    await new Promise<void>((resolve) => {
-      let resolved = false;
-      const done = () => {
-        if (resolved) return;
-        resolved = true;
-        replaceCanvas();
-        resolve();
-      };
-
-      // Timeout: if the editor hangs (audio/network errors on deployed builds),
-      // the import data is already in the persistent FS by this point.
-      const IMPORT_TIMEOUT_MS = 60_000;
-      setTimeout(() => {
-        if (!resolved) {
-          console.warn(`[patchwork] import pass timed out after ${IMPORT_TIMEOUT_MS / 1000}s, proceeding anyway`);
-          done();
-        }
-      }, IMPORT_TIMEOUT_MS);
-
-      const importEngine = new window.Engine({
-        canvas,
-        canvasResizePolicy: 0,
-        unloadAfterInit: false,
-        persistentPaths: PERSISTENT_PATHS,
-        emscriptenPoolSize: concurrency,
-        godotPoolSize: Math.floor(concurrency / 3),
-        onExit: done,
-      });
-
-      importEngine.init("godot.editor").then(() => {
-        for (const [filename, content] of files.entries()) {
-          importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content);
-        }
-        importEngine.start({
-          args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "--audio-driver", "Dummy", "-e", "--quit"],
-          persistentDrops: false,
-        });
-      });
-    });
-
-    console.timeEnd("import-pass");
-
-    // Mark as imported and reload so IndexedDB data is cleanly available
-    localStorage.setItem(cacheKey, "1");
-    console.log("[patchwork] import complete, reloading…");
-    window.location.reload();
-    return;
-  }
-
-  // Already imported — go straight to the game
   loading.style.display = "flex";
+  setStatus("Downloading project files");
+  setIndeterminate();
+
+  console.time("fetch-project-files");
+  const files = await getBranchFiles(branchId, (current, total) => {
+    setProgress(current / total);
+  });
+  console.timeEnd("fetch-project-files");
+  console.log(`Fetched ${files.size} files`);
+
+  setStatus("Importing project");
+  setIndeterminate();
+  console.time("import-pass");
+
+  await new Promise<void>((resolve) => {
+    let resolved = false;
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
+      replaceCanvas();
+      resolve();
+    };
+
+    const IMPORT_TIMEOUT_MS = 60_000;
+    setTimeout(() => {
+      if (!resolved) {
+        console.warn(`[patchwork] import pass timed out after ${IMPORT_TIMEOUT_MS / 1000}s, proceeding anyway`);
+        done();
+      }
+    }, IMPORT_TIMEOUT_MS);
+
+    const importEngine = new window.Engine({
+      canvas,
+      canvasResizePolicy: 0,
+      unloadAfterInit: false,
+      persistentPaths: PERSISTENT_PATHS,
+      emscriptenPoolSize: concurrency,
+      godotPoolSize: Math.floor(concurrency / 3),
+      onExit: done,
+    });
+
+    importEngine.init("godot.editor").then(() => {
+      for (const [filename, content] of files.entries()) {
+        importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content);
+      }
+      importEngine.start({
+        args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "--audio-driver", "Dummy", "-e", "--quit"],
+        persistentDrops: false,
+      });
+    });
+  });
+
+  console.timeEnd("import-pass");
+
   setStatus("Starting game");
   setIndeterminate();
   console.time("game-start");
@@ -268,9 +248,6 @@ async function launch() {
     args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3"],
     canvas,
   });
-
-  // Clear the import cache so a manual reload will re-import
-  localStorage.removeItem(cacheKey);
 
   console.timeEnd("game-start");
   console.timeEnd("total");
