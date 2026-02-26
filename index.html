@@ -22,7 +22,7 @@ body {
 #loading {
 	position: fixed;
 	inset: 0;
-	display: flex;
+	display: none;
 	flex-direction: column;
 	justify-content: center;
 	align-items: center;
@@ -98,6 +98,107 @@ canvas {
 canvas:focus {
 	outline: none;
 }
+
+#top-bar {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 20;
+	background: #1e2330;
+	padding: 0.5rem 1rem;
+	justify-content: flex-start;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+#top-bar label {
+	color: #e0e0e0;
+	font-size: 0.85rem;
+	opacity: 0.7;
+}
+
+#top-bar select {
+	appearance: none;
+	background: #262c3b;
+	color: #e0e0e0;
+	border: 1px solid rgba(105, 156, 232, 0.3);
+	border-radius: 0.375rem;
+	padding: 0.4rem 2rem 0.4rem 0.75rem;
+	font-size: 0.85rem;
+	font-family: inherit;
+	cursor: pointer;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e0e0e0' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 0.5rem center;
+}
+
+#top-bar select:hover {
+	border-color: rgba(105, 156, 232, 0.6);
+}
+
+#top-bar select:focus {
+	outline: none;
+	border-color: #699ce8;
+}
+
+#empty-state {
+	position: fixed;
+	inset: 0;
+	display: none;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	color: #e0e0e0;
+	gap: 1rem;
+	z-index: 10;
+}
+
+#empty-state img {
+	width: auto;
+	height: auto;
+	max-width: min(85%, 50vh);
+	max-height: 180px;
+	margin-bottom: 1rem;
+}
+
+#empty-state h2 {
+	margin: 0;
+	font-size: 1.1rem;
+	font-weight: 400;
+	opacity: 0.6;
+}
+
+#branch-list {
+	max-width: 30rem;
+	width: 90vw;
+	background: rgba(105, 156, 232, 0.08);
+	border: 1px solid rgba(105, 156, 232, 0.2);
+	border-radius: 0.5rem;
+	padding: 0.5rem 0;
+	list-style: none;
+	margin: 0;
+}
+
+#branch-list li a {
+	display: block;
+	padding: 0.5rem 1.25rem;
+	color: #699ce8;
+	text-decoration: none;
+	font-size: 0.95rem;
+	transition: background 0.15s;
+}
+
+#branch-list li a:hover {
+	background: rgba(105, 156, 232, 0.12);
+}
+
+#branch-list li a .branch-author {
+	opacity: 0.5;
+	font-size: 0.8rem;
+	margin-left: 0.5rem;
+}
 		</style>
 	</head>
 	<body>
@@ -106,6 +207,12 @@ canvas:focus {
 			<div id="progress-bar"><div id="progress-bar-inner"></div></div>
 			<div id="status-text">Loading…</div>
 			<div id="error-text" style="display: none;"></div>
+		</div>
+		<div id="top-bar"><label for="branch-select">Branch</label><select id="branch-select"></select></div>
+		<div id="empty-state">
+			<img src="logo.svg" alt="Godot Engine logo">
+			<h2>Select a branch to view</h2>
+			<ul id="branch-list"></ul>
 		</div>
 		<canvas id="canvas" tabindex="1"></canvas>
 		<script src="godot.editor.js"></script>

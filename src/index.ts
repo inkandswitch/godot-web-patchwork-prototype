@@ -1,6 +1,6 @@
 console.log("[patchwork] module loaded");
 
-import { getBranchFiles } from "./automerge_getter";
+import { getProjectMetadata, getBranchFiles } from "./automerge_getter";
 
 declare global {
   interface Window {
@@ -73,12 +73,89 @@ const PERSISTENT_PATHS = ["/home/web_user"];
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 const concurrency = clamp(navigator.hardwareConcurrency ?? 1, 12, 24);
 
+const params = new URLSearchParams(window.location.search);
+const branchSelect = document.getElementById("branch-select") as HTMLSelectElement;
+const topBar = document.getElementById("top-bar")!;
+const emptyState = document.getElementById("empty-state")!;
+const branchList = document.getElementById("branch-list")!;
+
+function sortedBranches(metadata: any) {
+  const branches = Object.values(metadata.branches) as any[];
+  branches.sort((a: any, b: any) => {
+    if (a.id === metadata.main_doc_id) return -1;
+    if (b.id === metadata.main_doc_id) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  return branches;
+}
+
+function showBranchList(metadata: any) {
+  const branches = sortedBranches(metadata);
+  for (const branch of branches) {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    const branchParams = new URLSearchParams(params);
+    branchParams.set("branch", branch.id);
+    a.href = "?" + branchParams.toString();
+    a.textContent = branch.name;
+    if (branch.created_by) {
+      const span = document.createElement("span");
+      span.className = "branch-author";
+      span.textContent = `by ${branch.created_by}`;
+      a.appendChild(span);
+    }
+    li.appendChild(a);
+    branchList.appendChild(li);
+  }
+}
+
+function setupBranchPicker(metadata: any, activeBranchId: string) {
+  const branches = sortedBranches(metadata);
+
+  for (const branch of branches) {
+    const option = document.createElement("option");
+    option.value = branch.id;
+    option.textContent = branch.created_by
+      ? `${branch.name} (${branch.created_by})`
+      : branch.name;
+    if (branch.id === activeBranchId) option.selected = true;
+    branchSelect.appendChild(option);
+  }
+
+  branchSelect.addEventListener("change", () => {
+    params.set("branch", branchSelect.value);
+    window.location.search = params.toString();
+  });
+}
+
 async function launch() {
   console.time("total");
 
-  console.time("fetch-project-files");
+  if (params.has("branch")) {
+    loading.style.display = "flex";
+    setStatus("Loading project…");
+    setIndeterminate();
+  }
+
+  const metadata = await getProjectMetadata(projectId!);
+
+  const branchId = params.get("branch") || null;
+
+  if (!branchId) {
+    showBranchList(metadata);
+    emptyState.style.display = "flex";
+    return;
+  }
+
+  setupBranchPicker(metadata, branchId);
+  topBar.style.display = "flex";
+
+  loading.style.display = "flex";
   setStatus("Downloading project files");
-  const files = await getBranchFiles(projectId!, undefined, (current, total) => {
+  setIndeterminate();
+
+  console.time("fetch-project-files");
+  const files = await getBranchFiles(branchId, (current, total) => {
     setProgress(current / total);
   });
   console.timeEnd("fetch-project-files");

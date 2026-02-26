@@ -21,61 +21,17 @@ export async function getDoc(docId: string): Promise<any> {
   return docJson;
 }
 
-// returns a map of file name to content
-export async function getBranchFiles(projectId: string, branchId?: string, onProgress?: (current: number, total: number) => void): Promise<Map<string, Uint8Array>> {
+export async function getProjectMetadata(projectId: string): Promise<any> {
+  const metadata = await getDoc(projectId);
+  if (!metadata) throw new Error(`Could not load project "${projectId}"`);
+  return metadata;
+}
+
+export async function getBranchFiles(branchId: string, onProgress?: (current: number, total: number) => void): Promise<Map<string, Uint8Array>> {
   var map = new Map<string, Uint8Array>();
-  // get the branch metadata doc from the server
-  // looks like this:
-  //{"branches":{"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke":{"fork_info":null,"id":"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke","merge_info":null,"name":"main"}},"main_doc_id":"3oXy4H2P4UPQ4BkB8eCK1Rbe3Rke"}
-  // we need to get the main_doc_id
-  // then we need to get the main doc id from the server
-  // looks like this:
-  /**
-     ```
-     {
-        "files": {
-            "res://LICENSE": {
-                "content": "MIT License\n\nCopyright (c) 2024 Endless OS Foundation\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
-            },
-            "res://README.md": {
-                "content": "# Moddable Platformer\n\nThis mini moddable game project by [Endless OS\nFoundation](https://endlessos.org) is intended to help ease the learning curve\ninto Godot.\n\nThis sample project allows learners to engage with game creation concepts,\napplying various modifications to the game itself, all without reading or\nwriting any code.\n\nThe `doc/MODS.md` file details the mods that have been made available.\n\n## Contributing\n\nWe encourage contributions that continue to address the intended audience and\ndesign of of this project. You can communicate with us through the [Endless\nStudios](https://endlessstudios.com/studio/games/Moddable-Platformer) community\nplatform and submit pull requests via\n[GitHub](https://github.com/endlessm/moddable-platformer).\n\n### Development environment\n\nPlease use [pre-commit](https://pre-commit.com) to check for correct formatting\nand other issues before creating commits. To do this automatically, you can add\nit as a git hook:\n\n```\n# If you don't have pre-commit already:\npip install pre-commit\n\n# Setup git hook:\npre-commit install\n```\n\nNow `pre-commit` will run automatically on `git commit`!\n"
-            },
-            "res://assets/background-layer-1.png": {
-                "url": "automerge:3V6nGzHfKmcY8J6z9ZEtVmojCJaH"
-            },
-            "res://components/coin/coin.tscn": {
-                "structured_content": {
-                  ...
-                }
-            },
-            "res://components/player/player.tscn": {
-                "structured_content": {
-                  ...
-                }
-            },
-        }
-    }
-    ```
-    // for files with a `content` field, just decode the string to a uint8array and copy the content to the map
-    // for files with a `url` field, get the file from the server, then copy the "content" field to the map (content field is already a uint8array)
-    // for files with a `structured_content` field, we need to call serializeGodotSceneAsUint8Array
-  
-    // return the map
-     */
 
-  // get the branch metadata doc
-
-  console.log(`[getBranchFiles] fetching branch metadata for ${projectId}`);
-  var branchMetadata = await getDoc(projectId);
-  if (!branchMetadata) {
-    throw new Error(`Could not load project "${projectId}"`);
-  }
-  console.log("[getBranchFiles] branch metadata:", branchMetadata);
-
-  branchId = branchId ?? branchMetadata.main_doc_id;
-
-  console.log(`[getBranchFiles] fetching main doc ${branchId}`);
-  var mainDoc = await getDoc(branchId!);
+  console.log(`[getBranchFiles] fetching branch doc ${branchId}`);
+  var mainDoc = await getDoc(branchId);
   if (!mainDoc?.files) {
     throw new Error(`Could not load project data — the project may be empty or corrupted.`);
   }
@@ -90,7 +46,15 @@ export async function getBranchFiles(projectId: string, branchId?: string, onPro
   const CONCURRENCY = 10;
   let running = 0;
 
+  // HACK: skip .exe files until the server stops including them
+  const SKIP_EXTENSIONS = [".exe"];
+
   for (const [filename, fileData] of entries as [string, any][]) {
+    if (SKIP_EXTENSIONS.some((ext) => filename.endsWith(ext))) {
+      completed++;
+      onProgress?.(completed, entries.length);
+      continue;
+    }
     if (fileData.content) {
       map.set(filename, new TextEncoder().encode(fileData.content));
       completed++;
@@ -125,9 +89,9 @@ export async function getBranchFiles(projectId: string, branchId?: string, onPro
   return map;
 }
 
-export async function getBranchFilesAsZip(projectId: string, branchId?: string): Promise<ArrayBuffer> {
+export async function getBranchFilesAsZip(branchId: string): Promise<ArrayBuffer> {
   var zip = new JSZip();
-  var map = await getBranchFiles(projectId, branchId);
+  var map = await getBranchFiles(branchId);
   for (const [filename, content] of map.entries()) {
     zip.file(filename.replace("res://", ""), content);
   }
