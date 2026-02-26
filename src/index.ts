@@ -38,7 +38,7 @@ async function showError(msg: string) {
   try {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 5000);
-    const res = await fetch("http://24.199.97.236:3000/", { signal: controller.signal });
+    const res = await fetch("/api/", { signal: controller.signal });
     serverReachable = res.ok;
   } catch {}
 
