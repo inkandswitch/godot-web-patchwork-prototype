@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no">
+		<meta name="theme-color" content="#202531">
+		<link rel="icon" type="image/png" href="favicon.png">
+		<title>Patchwork Viewer</title>
+		<style>
+body {
+	margin: 0;
+	background: #333b4f;
+	overflow: hidden;
+	touch-action: none;
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	min-height: 100vh;
+}
+
+#loading {
+	position: fixed;
+	inset: 0;
+	display: none;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	color: #e0e0e0;
+	gap: 1rem;
+	z-index: 10;
+}
+
+#loading img {
+	width: auto;
+	height: auto;
+	max-width: min(85%, 50vh);
+	max-height: 180px;
+	margin-bottom: 1rem;
+}
+
+#status-text {
+	font-size: 1.1rem;
+}
+
+#error-text {
+	color: #ff6b6b;
+	font-size: 1.1rem;
+	max-width: 30rem;
+	text-align: left;
+	line-height: 1.6;
+	background: rgba(255, 107, 107, 0.1);
+	border: 1px solid rgba(255, 107, 107, 0.25);
+	border-radius: 0.5rem;
+	padding: 1rem 1.5rem;
+}
+
+#error-text ul {
+	margin: 0.5rem 0 0;
+	padding-left: 1.25rem;
+	font-size: 0.95rem;
+	color: #e0e0e0;
+}
+
+#progress-bar {
+	width: min(320px, 70vw);
+	height: 6px;
+	background: #262c3b;
+	border-radius: 3px;
+	overflow: hidden;
+}
+
+#progress-bar-inner {
+	height: 100%;
+	width: 0%;
+	background: #699ce8;
+	border-radius: 3px;
+	transition: width 0.3s ease;
+}
+
+#progress-bar.indeterminate #progress-bar-inner {
+	width: 30%;
+	animation: indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+	0% { transform: translateX(-100%); }
+	100% { transform: translateX(433%); }
+}
+
+canvas {
+	display: block;
+	width: 100vw;
+	height: 100vh;
+	opacity: 0;
+}
+
+canvas:focus {
+	outline: none;
+}
+
+#top-bar {
+	display: none;
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 20;
+	background: #1e2330;
+	padding: 0.5rem 1rem;
+	justify-content: flex-start;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+#top-bar label {
+	color: #e0e0e0;
+	font-size: 0.85rem;
+	opacity: 0.7;
+}
+
+#top-bar select {
+	appearance: none;
+	background: #262c3b;
+	color: #e0e0e0;
+	border: 1px solid rgba(105, 156, 232, 0.3);
+	border-radius: 0.375rem;
+	padding: 0.4rem 2rem 0.4rem 0.75rem;
+	font-size: 0.85rem;
+	font-family: inherit;
+	cursor: pointer;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23e0e0e0' d='M3 5l3 3 3-3'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 0.5rem center;
+}
+
+#top-bar select:hover {
+	border-color: rgba(105, 156, 232, 0.6);
+}
+
+#top-bar select:focus {
+	outline: none;
+	border-color: #699ce8;
+}
+
+#empty-state {
+	position: fixed;
+	inset: 0;
+	display: none;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	color: #e0e0e0;
+	gap: 1rem;
+	z-index: 10;
+}
+
+#empty-state img {
+	width: auto;
+	height: auto;
+	max-width: min(85%, 50vh);
+	max-height: 180px;
+	margin-bottom: 1rem;
+}
+
+#empty-state h2 {
+	margin: 0;
+	font-size: 1.1rem;
+	font-weight: 400;
+	opacity: 0.6;
+}
+
+#branch-list {
+	max-width: 30rem;
+	width: 90vw;
+	background: rgba(105, 156, 232, 0.08);
+	border: 1px solid rgba(105, 156, 232, 0.2);
+	border-radius: 0.5rem;
+	padding: 0.5rem 0;
+	list-style: none;
+	margin: 0;
+}
+
+#branch-list li a {
+	display: block;
+	padding: 0.5rem 1.25rem;
+	color: #699ce8;
+	text-decoration: none;
+	font-size: 0.95rem;
+	transition: background 0.15s;
+}
+
+#branch-list li a:hover {
+	background: rgba(105, 156, 232, 0.12);
+}
+
+#branch-list li a .branch-author {
+	opacity: 0.5;
+	font-size: 0.8rem;
+	margin-left: 0.5rem;
+}
+
+#project-prompt {
+	position: fixed;
+	inset: 0;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	color: #e0e0e0;
+	gap: 1rem;
+	z-index: 10;
+}
+
+#project-prompt img {
+	width: auto;
+	height: auto;
+	max-width: min(85%, 50vh);
+	max-height: 180px;
+	margin-bottom: 1rem;
+}
+
+#project-prompt h2 {
+	margin: 0;
+	font-size: 1.1rem;
+	font-weight: 400;
+	opacity: 0.6;
+}
+
+#project-form {
+	display: flex;
+	gap: 0.5rem;
+	width: 90vw;
+	max-width: 30rem;
+}
+
+#project-form input {
+	flex: 1;
+	background: #262c3b;
+	color: #e0e0e0;
+	border: 1px solid rgba(105, 156, 232, 0.3);
+	border-radius: 0.375rem;
+	padding: 0.5rem 0.75rem;
+	font-size: 0.95rem;
+	font-family: inherit;
+}
+
+#project-form input::placeholder {
+	color: rgba(224, 224, 224, 0.35);
+}
+
+#project-form input:focus {
+	outline: none;
+	border-color: #699ce8;
+}
+
+#project-form button {
+	background: #699ce8;
+	color: #fff;
+	border: none;
+	border-radius: 0.375rem;
+	padding: 0.5rem 1.25rem;
+	font-size: 0.95rem;
+	font-family: inherit;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+#project-form button:hover {
+	background: #5a8ad4;
+}
+		</style>
+	</head>
+	<body>
+		<div id="loading">
+			<img src="logo.svg" alt="Godot Engine logo">
+			<div id="progress-bar"><div id="progress-bar-inner"></div></div>
+			<div id="status-text">Loading…</div>
+			<div id="error-text" style="display: none;"></div>
+		</div>
+		<div id="top-bar"><label for="branch-select">Branch</label><select id="branch-select"></select></div>
+		<div id="project-prompt" style="display: none;">
+			<img src="logo.svg" alt="Godot Engine logo">
+			<h2>Enter a project ID to get started</h2>
+			<form id="project-form">
+				<input type="text" id="project-input" placeholder="Paste project ID…" autocomplete="off" autofocus>
+				<button type="submit">Open</button>
+			</form>
+		</div>
+		<div id="empty-state">
+			<img src="logo.svg" alt="Godot Engine logo">
+			<h2>Select a branch to view</h2>
+			<ul id="branch-list"></ul>
+		</div>
+		<canvas id="canvas" tabindex="1"></canvas>
+		<script src="godot.editor.js"></script>
+		<script type="module" src="/src/index.ts"></script>
+	</body>
+</html>
