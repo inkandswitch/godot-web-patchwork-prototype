@@ -2,6 +2,23 @@ console.log("[patchwork] module loaded");
 
 import { getProjectMetadata, getBranchFiles } from "./automerge_getter";
 
+
+class EngineError extends Error {
+  public exitCode: number;
+  public errorLog: string[];
+  constructor(exitCode: number, errorLog: string[] = [], msg: string | undefined = undefined) {
+    super(msg);
+    this.exitCode = exitCode;
+    this.errorLog = errorLog;
+  }
+}
+
+class ImportError extends EngineError {
+}
+
+class GameError extends EngineError {
+}
+
 const loading = document.getElementById("loading")!;
 const statusText = document.getElementById("status-text")!;
 const errorText = document.getElementById("error-text")!;
@@ -22,7 +39,47 @@ function setIndeterminate() {
   progressBar.classList.add("indeterminate");
 }
 
-async function showError(msg: string) {
+function filterErrorLog(errorLog: string[]): string[] {
+  return errorLog.filter(line => !line.includes("leaked at exit") && !line.includes("WARNING:"));
+}
+
+async function showError(error: Error | ImportError | GameError | string) {
+  let msg = "";
+  let errorLog: string[] = [];
+  if (error instanceof Error) {
+    msg = error.message;
+  }
+
+  if (error instanceof EngineError) {
+    errorLog = error.errorLog;
+    if (error instanceof ImportError) {
+      msg = "An error occurred during the import pass";
+    } else if (error instanceof GameError) {
+      msg = "An error occurred during the launching the game";
+    } else {
+      msg = "An error occurred";
+    }
+    if (error.exitCode) {
+      msg += `exit_code: ${error.exitCode}`;
+    }
+    if (error.message) {
+      msg += `, message: "${error.message}"`;
+    }
+  } else if (typeof error === "string") {
+    msg = error;
+  } else {
+    msg = "An error occurred: " + error;
+  }
+
+  if (errorLog.length > 0) {
+    errorLog = filterErrorLog(errorLog);
+    // only show the last 10 lines
+    errorLog = errorLog.slice(-10);
+    errorLog.forEach(line => {
+      errorText.innerHTML += `<li>${line}</li>`;
+    });
+  }
+
   statusText.style.display = "none";
   document.getElementById("progress-bar")!.style.display = "none";
   errorText.style.display = "block";
@@ -183,14 +240,19 @@ async function launch() {
 
   await new Promise<void>((resolve, reject) => {
     let resolved = false;
+    let errorLog: string[] = [];
     const done = (statusCode: number) => {
       if (statusCode !== 0) {
-        reject(new Error(`[patchwork] import pass exited with status code ${statusCode}`));
+        reject(new ImportError(statusCode, errorLog));
       }
       if (resolved) return;
       resolved = true;
       replaceCanvas();
       resolve();
+    };
+    const addToErrorLog = (...var_args: unknown[]) => {
+      console.error(...var_args);
+      errorLog.push(var_args.map(String).join(" "));
     };
 
     const IMPORT_TIMEOUT_MS = 60_000;
@@ -202,7 +264,8 @@ async function launch() {
       persistentPaths: PERSISTENT_PATHS,
       emscriptenPoolSize: concurrency,
       godotPoolSize: Math.floor(concurrency / 3),
-      onExit: done
+      onExit: done,
+      onPrintError: addToErrorLog
     });
 
     importEngine.init("godot.editor").then(() => {
@@ -227,9 +290,15 @@ async function launch() {
   setStatus("Starting game");
   setIndeterminate();
   console.time("game-start");
+
+  let errorLog: string[] = [];
+  const addToErrorLog = (...var_args: unknown[]) => {
+    console.error(...var_args);
+    errorLog.push(var_args.map(String).join(" "));
+  };
   const gameDone = (statusCode: number) => {
     if (statusCode !== 0) {
-      throw new Error(`[patchwork] game exited with status code ${statusCode}`);
+      throw new GameError(statusCode, errorLog);
     }
     console.timeEnd("game-start");
     console.log("[patchwork] game exited with status code 0");
@@ -244,7 +313,8 @@ async function launch() {
     persistentPaths: PERSISTENT_PATHS,
     emscriptenPoolSize: concurrency,
     godotPoolSize: Math.floor(concurrency / 3),
-    onExit: gameDone
+    onExit: gameDone,
+    onPrintError: addToErrorLog
   });
 
   await game.init("godot.editor");
