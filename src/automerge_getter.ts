@@ -98,12 +98,3 @@ export async function getBranchFilesAsZip(branchId: string): Promise<ArrayBuffer
   }
   return (await zip.generateAsync({ type: "blob" })).arrayBuffer();
 }
-
-// function test() {
-//   to2i9YGkdhXy3Li4K7FoUSQ9Yzv
-//   getBranchFiles("to2i9YGkdhXy3Li4K7FoUSQ9Yzv").then((map) => {
-//     console.log(map);
-//   });
-// }
-
-// test();
