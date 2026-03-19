@@ -1,0 +1,172 @@
+declare namespace GodotDisplayVK {
+    let $GodotDisplayVK__deps: string[];
+    let $GodotDisplayVK__postset: string;
+    namespace $GodotDisplayVK {
+        let textinput: any;
+        let textarea: any;
+        function available(): boolean;
+        function init(input_cb: any): void;
+        function show(text: any, type: any, start: any, end: any): void;
+        function hide(): void;
+        function updateSize(): void;
+        function clear(): void;
+    }
+}
+declare namespace GodotDisplayCursor {
+    let $GodotDisplayCursor__deps: string[];
+    let $GodotDisplayCursor__postset: string;
+    namespace $GodotDisplayCursor {
+        export let shape: string;
+        export let visible: boolean;
+        export let cursors: {};
+        export function set_style(style: any): void;
+        export function set_shape(shape: any): void;
+        export function clear_1(): void;
+        export { clear_1 as clear };
+        export function lockPointer(): void;
+        export function releasePointer(): void;
+        export function isPointerLocked(): boolean;
+    }
+}
+declare namespace GodotDisplayScreen {
+    let $GodotDisplayScreen__deps: string[];
+    namespace $GodotDisplayScreen {
+        export let desired_size: number[];
+        export let hidpi: boolean;
+        export function getPixelRatio(): number;
+        export function isFullscreen(): any;
+        export function hasFullscreen(): any;
+        export function requestFullscreen(): 1 | 0;
+        export function exitFullscreen(): 1 | 0;
+        export function _updateGL(): void;
+        export function updateSize_1(): 1 | 0;
+        export { updateSize_1 as updateSize };
+    }
+}
+declare namespace GodotDisplay {
+    let $GodotDisplay__deps: string[];
+    namespace $GodotDisplay {
+        let window_icon: string;
+        function getDPI(): number;
+    }
+    let godot_js_display_is_swap_ok_cancel__proxy: string;
+    let godot_js_display_is_swap_ok_cancel__sig: string;
+    function godot_js_display_is_swap_ok_cancel(): 1 | 0;
+    let godot_js_tts_is_speaking__proxy: string;
+    let godot_js_tts_is_speaking__sig: string;
+    function godot_js_tts_is_speaking(): boolean;
+    let godot_js_tts_is_paused__proxy: string;
+    let godot_js_tts_is_paused__sig: string;
+    function godot_js_tts_is_paused(): boolean;
+    let godot_js_tts_get_voices__proxy: string;
+    let godot_js_tts_get_voices__sig: string;
+    function godot_js_tts_get_voices(p_callback: any): void;
+    let godot_js_tts_speak__proxy: string;
+    let godot_js_tts_speak__sig: string;
+    function godot_js_tts_speak(p_text: any, p_voice: any, p_volume: any, p_pitch: any, p_rate: any, p_utterance_id: any, p_callback: any): void;
+    let godot_js_tts_pause__proxy: string;
+    let godot_js_tts_pause__sig: string;
+    function godot_js_tts_pause(): void;
+    let godot_js_tts_resume__proxy: string;
+    let godot_js_tts_resume__sig: string;
+    function godot_js_tts_resume(): void;
+    let godot_js_tts_stop__proxy: string;
+    let godot_js_tts_stop__sig: string;
+    function godot_js_tts_stop(): void;
+    let godot_js_display_alert__proxy: string;
+    let godot_js_display_alert__sig: string;
+    function godot_js_display_alert(p_text: any): void;
+    let godot_js_display_screen_dpi_get__proxy: string;
+    let godot_js_display_screen_dpi_get__sig: string;
+    function godot_js_display_screen_dpi_get(): any;
+    let godot_js_display_pixel_ratio_get__proxy: string;
+    let godot_js_display_pixel_ratio_get__sig: string;
+    function godot_js_display_pixel_ratio_get(): any;
+    let godot_js_display_fullscreen_request__proxy: string;
+    let godot_js_display_fullscreen_request__sig: string;
+    function godot_js_display_fullscreen_request(): any;
+    let godot_js_display_fullscreen_exit__proxy: string;
+    let godot_js_display_fullscreen_exit__sig: string;
+    function godot_js_display_fullscreen_exit(): any;
+    let godot_js_display_desired_size_set__proxy: string;
+    let godot_js_display_desired_size_set__sig: string;
+    function godot_js_display_desired_size_set(width: any, height: any): void;
+    let godot_js_display_size_update__proxy: string;
+    let godot_js_display_size_update__sig: string;
+    function godot_js_display_size_update(): any;
+    let godot_js_display_screen_size_get__proxy: string;
+    let godot_js_display_screen_size_get__sig: string;
+    function godot_js_display_screen_size_get(width: any, height: any): void;
+    let godot_js_display_window_size_get__proxy: string;
+    let godot_js_display_window_size_get__sig: string;
+    function godot_js_display_window_size_get(p_width: any, p_height: any): void;
+    let godot_js_display_has_webgl__proxy: string;
+    let godot_js_display_has_webgl__sig: string;
+    function godot_js_display_has_webgl(p_version: any): boolean;
+    let godot_js_display_canvas_focus__proxy: string;
+    let godot_js_display_canvas_focus__sig: string;
+    function godot_js_display_canvas_focus(): void;
+    let godot_js_display_canvas_is_focused__proxy: string;
+    let godot_js_display_canvas_is_focused__sig: string;
+    function godot_js_display_canvas_is_focused(): boolean;
+    let godot_js_display_touchscreen_is_available__proxy: string;
+    let godot_js_display_touchscreen_is_available__sig: string;
+    function godot_js_display_touchscreen_is_available(): boolean;
+    let godot_js_display_clipboard_set__proxy: string;
+    let godot_js_display_clipboard_set__sig: string;
+    function godot_js_display_clipboard_set(p_text: any): 1 | 0;
+    let godot_js_display_clipboard_get__proxy: string;
+    let godot_js_display_clipboard_get__sig: string;
+    function godot_js_display_clipboard_get(callback: any): void;
+    let godot_js_display_window_title_set__proxy: string;
+    let godot_js_display_window_title_set__sig: string;
+    function godot_js_display_window_title_set(p_data: any): void;
+    let godot_js_display_window_icon_set__proxy: string;
+    let godot_js_display_window_icon_set__sig: string;
+    function godot_js_display_window_icon_set(p_ptr: any, p_len: any): void;
+    let godot_js_display_cursor_set_visible__proxy: string;
+    let godot_js_display_cursor_set_visible__sig: string;
+    function godot_js_display_cursor_set_visible(p_visible: any): void;
+    let godot_js_display_cursor_is_hidden__proxy: string;
+    let godot_js_display_cursor_is_hidden__sig: string;
+    function godot_js_display_cursor_is_hidden(): boolean;
+    let godot_js_display_cursor_set_shape__proxy: string;
+    let godot_js_display_cursor_set_shape__sig: string;
+    function godot_js_display_cursor_set_shape(p_string: any): void;
+    let godot_js_display_cursor_set_custom_shape__proxy: string;
+    let godot_js_display_cursor_set_custom_shape__sig: string;
+    function godot_js_display_cursor_set_custom_shape(p_shape: any, p_ptr: any, p_len: any, p_hotspot_x: any, p_hotspot_y: any): void;
+    let godot_js_display_cursor_lock_set__proxy: string;
+    let godot_js_display_cursor_lock_set__sig: string;
+    function godot_js_display_cursor_lock_set(p_lock: any): void;
+    let godot_js_display_cursor_is_locked__proxy: string;
+    let godot_js_display_cursor_is_locked__sig: string;
+    function godot_js_display_cursor_is_locked(): 1 | 0;
+    let godot_js_display_fullscreen_cb__proxy: string;
+    let godot_js_display_fullscreen_cb__sig: string;
+    function godot_js_display_fullscreen_cb(callback: any): void;
+    let godot_js_display_window_blur_cb__proxy: string;
+    let godot_js_display_window_blur_cb__sig: string;
+    function godot_js_display_window_blur_cb(callback: any): void;
+    let godot_js_display_notification_cb__proxy: string;
+    let godot_js_display_notification_cb__sig: string;
+    function godot_js_display_notification_cb(callback: any, p_enter: any, p_exit: any, p_in: any, p_out: any): void;
+    let godot_js_display_setup_canvas__proxy: string;
+    let godot_js_display_setup_canvas__sig: string;
+    function godot_js_display_setup_canvas(p_width: any, p_height: any, p_fullscreen: any, p_hidpi: any): void;
+    let godot_js_display_vk_show__proxy: string;
+    let godot_js_display_vk_show__sig: string;
+    function godot_js_display_vk_show(p_text: any, p_type: any, p_start: any, p_end: any): void;
+    let godot_js_display_vk_hide__proxy: string;
+    let godot_js_display_vk_hide__sig: string;
+    function godot_js_display_vk_hide(): void;
+    let godot_js_display_vk_available__proxy: string;
+    let godot_js_display_vk_available__sig: string;
+    function godot_js_display_vk_available(): any;
+    let godot_js_display_tts_available__proxy: string;
+    let godot_js_display_tts_available__sig: string;
+    function godot_js_display_tts_available(): boolean;
+    let godot_js_display_vk_cb__proxy: string;
+    let godot_js_display_vk_cb__sig: string;
+    function godot_js_display_vk_cb(p_input_cb: any): void;
+}
