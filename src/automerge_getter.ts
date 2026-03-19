@@ -91,8 +91,12 @@ export async function getBranchFiles(branchId: string, onProgress?: (current: nu
 }
 
 export async function getBranchFilesAsZip(branchId: string): Promise<ArrayBuffer> {
-  var zip = new JSZip();
   var map = await getBranchFiles(branchId);
+  return await zipBranchFiles(map);
+}
+
+export async function zipBranchFiles(map: Map<string, Uint8Array<ArrayBufferLike>>): Promise<ArrayBuffer> {
+  var zip = new JSZip();
   for (const [filename, content] of map.entries()) {
     zip.file(filename.replace("res://", ""), content);
   }

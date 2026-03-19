@@ -1,6 +1,6 @@
 console.log("[patchwork] module loaded");
 
-import { getProjectMetadata, getBranchFiles } from "./automerge_getter";
+import { getProjectMetadata, getBranchFiles, zipBranchFiles } from "./automerge_getter";
 
 
 class EngineError extends Error {
@@ -137,9 +137,42 @@ const concurrency = clamp(navigator.hardwareConcurrency ?? 1, 12, 24);
 
 const params = new URLSearchParams(window.location.search);
 const branchSelect = document.getElementById("branch-select") as HTMLSelectElement;
+const branchDownloadButton = document.getElementById("branch-download") as HTMLButtonElement;
 const topBar = document.getElementById("top-bar")!;
 const emptyState = document.getElementById("empty-state")!;
 const branchList = document.getElementById("branch-list")!;
+let activeBranchFiles: Map<string, Uint8Array> | null = null;
+let activeBranchFilesPromise: Promise<Map<string, Uint8Array>> | null = null;
+
+function sanitizeFilePart(value: string): string {
+  return value
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function triggerDownload(buffer: ArrayBuffer, filename: string) {
+  const blob = new Blob([buffer], { type: "application/zip" });
+  const objectUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  downloadLink.href = objectUrl;
+  downloadLink.download = filename;
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+async function getActiveBranchFiles(): Promise<Map<string, Uint8Array>> {
+  if (activeBranchFiles) {
+    return activeBranchFiles;
+  }
+  if (activeBranchFilesPromise) {
+    return await activeBranchFilesPromise;
+  }
+  throw new Error("Project files are not available yet");
+}
 
 function sortedBranches(metadata: any) {
   const branches = Object.values(metadata.branches) as any[];
@@ -188,9 +221,38 @@ function setupBranchPicker(metadata: any, activeBranchId: string) {
     params.set("branch", branchSelect.value);
     window.location.search = params.toString();
   });
+
+  branchDownloadButton.addEventListener("click", async () => {
+    const originalLabel = branchDownloadButton.textContent || "Download zip";
+    branchDownloadButton.disabled = true;
+    branchDownloadButton.textContent = "Downloading...";
+
+    try {
+      const selectedBranchId = branchSelect.value;
+      const files = await getActiveBranchFiles();
+      const zipBuffer = await zipBranchFiles(files);
+      const selectedBranchLabel = branchSelect.selectedOptions[0]?.textContent || selectedBranchId;
+      const safeProjectId = sanitizeFilePart(projectId || "project") || "project";
+      const safeBranchLabel = sanitizeFilePart(selectedBranchLabel) || "branch";
+      triggerDownload(zipBuffer, `project-${safeProjectId}-${safeBranchLabel}.zip`);
+    } catch (error) {
+      console.error("[patchwork] failed to download branch zip:", error);
+      branchDownloadButton.textContent = "Download failed";
+      setTimeout(() => {
+        branchDownloadButton.textContent = originalLabel;
+      }, 1500);
+      return;
+    } finally {
+      branchDownloadButton.disabled = false;
+    }
+
+    branchDownloadButton.textContent = originalLabel;
+  });
 }
 
 async function launch() {
+  activeBranchFilesPromise = null;
+  activeBranchFiles = null;
   console.time("total");
 
   if (params.has("branch")) {
@@ -228,9 +290,11 @@ async function launch() {
   setIndeterminate();
 
   console.time("fetch-project-files");
-  const files = await getBranchFiles(branchId, (current, total) => {
+  activeBranchFilesPromise = getBranchFiles(branchId, (current, total) => {
     setProgress(current / total);
   });
+  const files = await activeBranchFilesPromise;
+  activeBranchFiles = files;
   console.timeEnd("fetch-project-files");
   console.log(`Fetched ${files.size} files`);
 
