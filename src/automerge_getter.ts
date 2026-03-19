@@ -2,13 +2,14 @@ import { serializeGodotSceneAsUint8Array } from "./godot_serializer";
 // import zip library
 import JSZip from "jszip";
 const DOC_FETCH_URL = `/api/doc/[docId]`;
+const TIMEOUT = 60000;
 
 export async function getDoc(docId: string): Promise<any> {
   const url = DOC_FETCH_URL.replace("[docId]", docId);
   console.log(`[getDoc] fetching ${url}`);
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT);
     var doc = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
     console.log(`[getDoc] response ${doc.status} for ${docId}`);
