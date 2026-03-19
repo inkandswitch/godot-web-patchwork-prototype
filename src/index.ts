@@ -2,12 +2,6 @@ console.log("[patchwork] module loaded");
 
 import { getProjectMetadata, getBranchFiles } from "./automerge_getter";
 
-declare global {
-  interface Window {
-    Engine: any;
-  }
-}
-
 const loading = document.getElementById("loading")!;
 const statusText = document.getElementById("status-text")!;
 const errorText = document.getElementById("error-text")!;
@@ -187,9 +181,12 @@ async function launch() {
   setIndeterminate();
   console.time("import-pass");
 
-  await new Promise<void>((resolve) => {
+  await new Promise<void>((resolve, reject) => {
     let resolved = false;
-    const done = () => {
+    const done = (statusCode: number) => {
+      if (statusCode !== 0) {
+        reject(new Error(`[patchwork] import pass exited with status code ${statusCode}`));
+      }
       if (resolved) return;
       resolved = true;
       replaceCanvas();
@@ -197,12 +194,6 @@ async function launch() {
     };
 
     const IMPORT_TIMEOUT_MS = 60_000;
-    setTimeout(() => {
-      if (!resolved) {
-        console.warn(`[patchwork] import pass timed out after ${IMPORT_TIMEOUT_MS / 1000}s, proceeding anyway`);
-        done();
-      }
-    }, IMPORT_TIMEOUT_MS);
 
     const importEngine = new window.Engine({
       canvas,
@@ -211,13 +202,19 @@ async function launch() {
       persistentPaths: PERSISTENT_PATHS,
       emscriptenPoolSize: concurrency,
       godotPoolSize: Math.floor(concurrency / 3),
-      onExit: done,
+      onExit: done
     });
 
     importEngine.init("godot.editor").then(() => {
       for (const [filename, content] of files.entries()) {
-        importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content);
+        importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content.buffer as ArrayBuffer);
       }
+      setTimeout(() => {
+        if (!resolved) {
+          console.warn(`[patchwork] import pass timed out after ${IMPORT_TIMEOUT_MS / 1000}s, proceeding anyway`);
+          done(0);
+        }
+      }, IMPORT_TIMEOUT_MS);  
       importEngine.start({
         args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "--audio-driver", "Dummy", "-e", "--quit"],
         persistentDrops: false,
@@ -230,6 +227,15 @@ async function launch() {
   setStatus("Starting game");
   setIndeterminate();
   console.time("game-start");
+  const gameDone = (statusCode: number) => {
+    if (statusCode !== 0) {
+      throw new Error(`[patchwork] game exited with status code ${statusCode}`);
+    }
+    console.timeEnd("game-start");
+    console.log("[patchwork] game exited with status code 0");
+    canvas.style.opacity = "1";
+    loading.style.display = "none";
+  };
 
   const game = new window.Engine({
     canvas,
@@ -238,6 +244,7 @@ async function launch() {
     persistentPaths: PERSISTENT_PATHS,
     emscriptenPoolSize: concurrency,
     godotPoolSize: Math.floor(concurrency / 3),
+    onExit: gameDone
   });
 
   await game.init("godot.editor");
