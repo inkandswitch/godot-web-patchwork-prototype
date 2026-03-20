@@ -90,6 +90,24 @@ export async function getBranchFiles(branchId: string, onProgress?: (current: nu
   return map;
 }
 
+// array of strings
+export async function getLastHeads(docId: string): Promise<string[] | null> {
+  const url = `/api/last_heads/${docId}`;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TIMEOUT);
+    var doc = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    console.log(`[getDoc] response ${doc.status} for ${docId}`);
+    var docJson = await doc.json();
+    console.log(`[getDoc] parsed JSON for ${docId}`);
+  } catch (e) {
+    console.error("[getDoc] Error getting doc: ", docId, e);
+    return null;
+  }
+  return docJson as string[];
+}
+
 export async function getBranchFilesAsZip(branchId: string): Promise<ArrayBuffer> {
   var map = await getBranchFiles(branchId);
   return await zipBranchFiles(map);
