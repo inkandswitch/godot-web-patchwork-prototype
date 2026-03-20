@@ -1,7 +1,18 @@
 import { openDB } from "idb";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createIDBFSAccessor, IDBFSAccessorError, type IDBFSStore } from "../src/idbfs_accessor";
+import {
+    createIDBFSAccessor,
+    formatModeOctal,
+    formatPermissionsSymbolic,
+    getPermissionBits,
+    IDBFSAccessorError,
+    isDirectoryMode,
+    isRegularFileMode,
+    makeDirectoryMode,
+    makeRegularFileMode,
+    type IDBFSStore,
+} from "../src/idbfs_accessor";
 
 async function seedFileDataStore(dbName: string): Promise<void> {
     const db = await openDB(dbName, 1, {
@@ -362,5 +373,27 @@ describe("IDBFS accessor", () => {
         rawDb.close();
 
         await expect(accessor.get("/home/web_user/invalid.ts")).rejects.toBeInstanceOf(IDBFSAccessorError);
+    });
+});
+
+describe("IDBFS mode helpers", () => {
+    it("formats and classifies unix modes", () => {
+        const fileMode = makeRegularFileMode(0o644);
+        const directoryMode = makeDirectoryMode(0o755);
+
+        expect(fileMode).toBe(33188);
+        expect(directoryMode).toBe(16877);
+
+        expect(formatModeOctal(fileMode)).toBe("100644");
+        expect(formatModeOctal(directoryMode)).toBe("40755");
+        expect(formatPermissionsSymbolic(fileMode)).toBe("rw-r--r--");
+        expect(formatPermissionsSymbolic(directoryMode)).toBe("rwxr-xr-x");
+
+        expect(isRegularFileMode(fileMode)).toBe(true);
+        expect(isRegularFileMode(directoryMode)).toBe(false);
+        expect(isDirectoryMode(directoryMode)).toBe(true);
+        expect(isDirectoryMode(fileMode)).toBe(false);
+        expect(getPermissionBits(fileMode)).toBe(0o644);
+        expect(getPermissionBits(directoryMode)).toBe(0o755);
     });
 });

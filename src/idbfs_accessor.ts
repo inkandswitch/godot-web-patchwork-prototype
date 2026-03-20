@@ -1,6 +1,48 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 
 const DEFAULT_STORE_NAME = "FILE_DATA";
+const S_IFMT = 0o170000;
+const S_IFREG = 0o100000;
+const S_IFDIR = 0o040000;
+const PERMISSION_MASK = 0o777;
+
+export const IDBFS_DEFAULT_FILE_PERMISSIONS = 0o644;
+export const IDBFS_DEFAULT_DIRECTORY_PERMISSIONS = 0o755;
+
+export function getPermissionBits(mode: number): number {
+    return mode & PERMISSION_MASK;
+}
+
+export function isRegularFileMode(mode: number): boolean {
+    return (mode & S_IFMT) === S_IFREG;
+}
+
+export function isDirectoryMode(mode: number): boolean {
+    return (mode & S_IFMT) === S_IFDIR;
+}
+
+export function makeRegularFileMode(permissions: number = IDBFS_DEFAULT_FILE_PERMISSIONS): number {
+    return S_IFREG | (permissions & PERMISSION_MASK);
+}
+
+export function makeDirectoryMode(permissions: number = IDBFS_DEFAULT_DIRECTORY_PERMISSIONS): number {
+    return S_IFDIR | (permissions & PERMISSION_MASK);
+}
+
+export function formatModeOctal(mode: number): string {
+    return mode.toString(8);
+}
+
+export function formatPermissionsSymbolic(mode: number): string {
+    const bits = getPermissionBits(mode);
+    const groups = [6, 3, 0];
+    return groups
+        .map((shift) => {
+            const group = (bits >> shift) & 0o7;
+            return `${group & 0o4 ? "r" : "-"}${group & 0o2 ? "w" : "-"}${group & 0o1 ? "x" : "-"}`;
+        })
+        .join("");
+}
 
 interface IDBFSPersistedEntry {
     timestamp: Date | number | string;
@@ -337,7 +379,7 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
                         directoryPath,
                         {
                             timestamp: normalizedTimestamp,
-                            mode: 16893,
+                            mode: makeDirectoryMode(),
                             kind: "directory",
                         },
                         "mkdirp",
@@ -449,7 +491,7 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
                         normalizedPath,
                         {
                             timestamp,
-                            mode: 33188,
+                            mode: makeRegularFileMode(),
                             kind: "file",
                             contents: new Uint8Array([]).buffer,
                         },
