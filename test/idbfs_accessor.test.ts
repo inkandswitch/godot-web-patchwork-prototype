@@ -1,7 +1,7 @@
 import { openDB } from "idb";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { createIDBFSAccessor, IDBFSAccessorError, type IDBFSStore } from "../idbfs_accessor";
+import { createIDBFSAccessor, IDBFSAccessorError, type IDBFSStore } from "../src/idbfs_accessor";
 
 async function seedFileDataStore(dbName: string): Promise<void> {
     const db = await openDB(dbName, 1, {

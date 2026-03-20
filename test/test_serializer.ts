@@ -1,4 +1,4 @@
-import { serializeGodotScene } from "../godot_serializer";
+import { serializeGodotScene } from "../src/godot_serializer";
 
 function test() {
     const fs = require('fs');

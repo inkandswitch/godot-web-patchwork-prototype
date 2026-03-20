@@ -1,5 +1,5 @@
 import path from "path";
-import { getBranchFiles, getBranchFilesAsZip } from "../automerge_getter";
+import { getBranchFiles, getBranchFilesAsZip } from "../src/automerge_getter";
 import fs from "fs";
 async function testProjectGet() {
     let files = await getBranchFiles("to2i9YGkdhXy3Li4K7FoUSQ9Yzv")
