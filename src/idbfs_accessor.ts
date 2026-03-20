@@ -259,7 +259,18 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
             return withStore("readwrite", "touch", async (store) => {
                 const existing = await store.get(normalizedPath);
                 if (existing === undefined) {
-                    throw new IDBFSAccessorError("touch", dbName, storeName, `Cannot touch missing path: ${normalizedPath}`);
+                    await store.put(
+                        encodeEntry(
+                            {
+                                timestamp,
+                                mode: 33188,
+                                contents: new Uint8Array([]).buffer,
+                            },
+                            "touch",
+                        ),
+                        normalizedPath,
+                    );
+                    return;
                 }
                 const decoded = decodeEntry(existing, "touch");
                 await store.put(
