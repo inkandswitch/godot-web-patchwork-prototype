@@ -1,4 +1,15 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+// how this is laid out:
+// database name is the name of a directory on the virtual filesystem, e.g. "/home/web_user"
+// store name is "FILE_DATA"
+// FILE_DATA entries are like this:
+// key: path
+// value: {
+//   timestamp: string // date in ISO string format
+//   mode: number
+//   contents?: ArrayBuffer
+// }
+// if contents is not present, the entry is a directory
 
 const DEFAULT_STORE_NAME = "FILE_DATA";
 const S_IFMT = 0o170000;
