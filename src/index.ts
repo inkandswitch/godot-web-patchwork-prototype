@@ -1,6 +1,7 @@
 console.log("[patchwork] module loaded");
 
 import { getProjectMetadata, getBranchFiles, zipBranchFiles } from "./automerge_getter";
+import { createIDBFSAccessor, IDBFSEntry } from "./idbfs_accessor";
 
 
 class EngineError extends Error {
@@ -204,6 +205,14 @@ function showBranchList(metadata: any) {
   }
 }
 
+async function downloadZip(selectedBranchId: string, files: Map<string, Uint8Array>): Promise<void> {
+  const zipBuffer = await zipBranchFiles(files);
+  const selectedBranchLabel = branchSelect.selectedOptions[0]?.textContent || selectedBranchId;
+  const safeProjectId = sanitizeFilePart(projectId || "project") || "project";
+  const safeBranchLabel = sanitizeFilePart(selectedBranchLabel) || "branch";
+  triggerDownload(zipBuffer, `project-${safeProjectId}-${safeBranchLabel}.zip`);
+}
+
 function setupBranchPicker(metadata: any, activeBranchId: string) {
   const branches = sortedBranches(metadata);
 
@@ -229,12 +238,7 @@ function setupBranchPicker(metadata: any, activeBranchId: string) {
 
     try {
       const selectedBranchId = branchSelect.value;
-      const files = await getActiveBranchFiles();
-      const zipBuffer = await zipBranchFiles(files);
-      const selectedBranchLabel = branchSelect.selectedOptions[0]?.textContent || selectedBranchId;
-      const safeProjectId = sanitizeFilePart(projectId || "project") || "project";
-      const safeBranchLabel = sanitizeFilePart(selectedBranchLabel) || "branch";
-      triggerDownload(zipBuffer, `project-${safeProjectId}-${safeBranchLabel}.zip`);
+      downloadZip(selectedBranchId, await getActiveBranchFiles());
     } catch (error) {
       console.error("[patchwork] failed to download branch zip:", error);
       branchDownloadButton.textContent = "Download failed";
@@ -248,6 +252,17 @@ function setupBranchPicker(metadata: any, activeBranchId: string) {
 
     branchDownloadButton.textContent = originalLabel;
   });
+}
+
+function entriesToMap(entries: Record<string, IDBFSEntry>): Map<string, Uint8Array> {
+  const map = new Map<string, Uint8Array>();
+  for (const [path, entry] of Object.entries(entries)) {
+    if (!entry.contents) {
+      continue;
+    }
+    map.set(path, new Uint8Array(entry.contents));
+  }
+  return map;
 }
 
 async function launch() {
@@ -301,6 +316,13 @@ async function launch() {
   setStatus("Importing project");
   setIndeterminate();
   console.time("import-pass");
+  // clear the IDBFS for the persistent path
+  try {
+    const accessor = createIDBFSAccessor(PERSISTENT_PATHS[0]);
+    await accessor.clear();
+  } catch (error) {
+    // IDBFS doesn't exist for that path yet, ignore
+  }
 
   await new Promise<void>((resolve, reject) => {
     let resolved = false;
