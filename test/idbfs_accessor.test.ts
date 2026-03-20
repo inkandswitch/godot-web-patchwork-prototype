@@ -19,7 +19,10 @@ describe("IDBFS accessor", () => {
     let accessor: IDBFSStore;
 
     beforeEach(async () => {
-        dbName = `idbfs-accessor-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        dbName = "/home/web_user";
+        if (await indexedDB.databases().then((dbs) => dbs.some((db) => db.name === dbName))) {
+            await indexedDB.deleteDatabase(dbName);
+        }
         await seedFileDataStore(dbName);
         accessor = createIDBFSAccessor(dbName);
     });
@@ -255,6 +258,25 @@ describe("IDBFS accessor", () => {
         expect(entry?.kind).toBe("directory");
         expect(entry?.contents).toBeUndefined();
         expect(entry?.timestamp.toISOString()).toBe("2026-03-21T00:00:00.000Z");
+    });
+
+    it("mkdirp creates nested directories and is idempotent", async () => {
+        await accessor.mkdirp("/home/web_user/.cache/godot");
+        await accessor.mkdirp("/home/web_user/.cache/godot");
+
+        await expect(accessor.isDirectory("/home/web_user")).resolves.toBe(true);
+        await expect(accessor.isDirectory("/home/web_user/.cache")).resolves.toBe(true);
+        await expect(accessor.isDirectory("/home/web_user/.cache/godot")).resolves.toBe(true);
+    });
+
+    it("mkdirp fails if an intermediate path is a file", async () => {
+        await accessor.putFile("/home/web_user/.cache", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([1]).buffer,
+        });
+
+        await expect(accessor.mkdirp("/home/web_user/.cache/godot")).rejects.toBeInstanceOf(IDBFSAccessorError);
     });
 
     it("rejects malformed persisted timestamp values", async () => {

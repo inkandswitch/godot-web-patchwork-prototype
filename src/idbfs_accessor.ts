@@ -58,6 +58,7 @@ export interface IDBFSStore {
     getKind(path: string): Promise<IDBFSEntryKind | null>;
     isFile(path: string): Promise<boolean>;
     isDirectory(path: string): Promise<boolean>;
+    mkdirp(path: string, timestamp?: Date | number | string): Promise<void>;
     put(path: string, entry: IDBFSWritableEntry): Promise<void>;
     putFile(path: string, entry: IDBFSWritableFileEntry): Promise<void>;
     putDirectory(path: string, entry: IDBFSWritableDirectoryEntry): Promise<void>;
@@ -228,6 +229,25 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
         await store.put(encodeEntry(entry, operation), path);
     };
 
+    const getDirectoryPathsToCreate = (path: string): string[] => {
+        const trimmed = path.trim();
+        if (trimmed === "/") {
+            return ["/"];
+        }
+
+        const normalized = trimmed.replace(/\/+/g, "/").replace(/\/$/, "");
+        const segments = normalized.split("/").filter((segment) => segment.length > 0);
+        const directories: string[] = [];
+        let current = "";
+
+        for (const segment of segments) {
+            current = `${current}/${segment}`;
+            directories.push(current);
+        }
+
+        return directories;
+    };
+
     const accessor: IDBFSStore = {
         async listPaths(): Promise<string[]> {
             return withStore("readonly", "listPaths", async (store) => {
@@ -252,6 +272,36 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
 
         async isDirectory(path: string): Promise<boolean> {
             return (await accessor.getKind(path)) === "directory";
+        },
+
+        async mkdirp(path: string, timestamp: Date | number | string = new Date()): Promise<void> {
+            if (!path.startsWith(dbName)) {
+                throw new IDBFSAccessorError("mkdirp", dbName, storeName, `Path must start with database name: ${dbName}`);
+            }
+            const directories = getDirectoryPathsToCreate(normalizePath(path, "mkdirp"));
+            const normalizedTimestamp = normalizeTimestamp(timestamp, "mkdirp").toISOString();
+
+            return withStore("readwrite", "mkdirp", async (store) => {
+                for (const directoryPath of directories) {
+                    const existing = await getEntryOrNull(store, directoryPath, "mkdirp");
+                    if (existing?.kind === "file") {
+                        throw new IDBFSAccessorError("mkdirp", dbName, storeName, `Cannot create directory over file: ${directoryPath}`);
+                    }
+                    if (existing?.kind === "directory") {
+                        continue;
+                    }
+                    await putEntry(
+                        store,
+                        directoryPath,
+                        {
+                            timestamp: normalizedTimestamp,
+                            mode: 16893,
+                            kind: "directory",
+                        },
+                        "mkdirp",
+                    );
+                }
+            });
         },
 
         async put(path: string, entry: IDBFSWritableEntry): Promise<void> {
