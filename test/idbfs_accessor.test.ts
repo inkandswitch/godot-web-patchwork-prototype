@@ -260,6 +260,81 @@ describe("IDBFS accessor", () => {
         expect(entry?.timestamp.toISOString()).toBe("2026-03-21T00:00:00.000Z");
     });
 
+    it("getRecursive returns only the requested file when target is a file", async () => {
+        await accessor.putFile("/home/web_user/example.bin", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([1, 2, 3]).buffer,
+        });
+        await accessor.putDirectory("/home/web_user/.cache", {
+            timestamp: Date.now(),
+            mode: 16893,
+        });
+
+        const result = await accessor.getRecursive("/home/web_user/example.bin");
+        expect(Object.keys(result)).toEqual(["/home/web_user/example.bin"]);
+        expect(result["/home/web_user/example.bin"]?.kind).toBe("file");
+    });
+
+    it("getRecursive returns directory tree entries when target is a directory", async () => {
+        await accessor.mkdirp("/home/web_user/.cache/godot");
+        await accessor.putFile("/home/web_user/.cache/godot/file_a.bin", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([1]).buffer,
+        });
+        await accessor.putFile("/home/web_user/other.bin", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([9]).buffer,
+        });
+
+        const result = await accessor.getRecursive("/home/web_user/.cache");
+        expect(Object.keys(result).sort((a, b) => a.localeCompare(b))).toEqual([
+            "/home/web_user/.cache",
+            "/home/web_user/.cache/godot",
+            "/home/web_user/.cache/godot/file_a.bin",
+        ]);
+    });
+
+    it("deleteRecursive deletes a file target only", async () => {
+        await accessor.putFile("/home/web_user/example.bin", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([1]).buffer,
+        });
+        await accessor.putFile("/home/web_user/keep.bin", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([2]).buffer,
+        });
+
+        await accessor.deleteRecursive("/home/web_user/example.bin");
+        await expect(accessor.exists("/home/web_user/example.bin")).resolves.toBe(false);
+        await expect(accessor.exists("/home/web_user/keep.bin")).resolves.toBe(true);
+    });
+
+    it("deleteRecursive deletes all entries under a directory target", async () => {
+        await accessor.mkdirp("/home/web_user/.cache/godot");
+        await accessor.putFile("/home/web_user/.cache/godot/file_a.bin", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([1]).buffer,
+        });
+        await accessor.putFile("/home/web_user/keep.bin", {
+            timestamp: Date.now(),
+            mode: 33188,
+            contents: new Uint8Array([2]).buffer,
+        });
+
+        await accessor.deleteRecursive("/home/web_user/.cache");
+
+        await expect(accessor.exists("/home/web_user/.cache")).resolves.toBe(false);
+        await expect(accessor.exists("/home/web_user/.cache/godot")).resolves.toBe(false);
+        await expect(accessor.exists("/home/web_user/.cache/godot/file_a.bin")).resolves.toBe(false);
+        await expect(accessor.exists("/home/web_user/keep.bin")).resolves.toBe(true);
+    });
+
     it("mkdirp creates nested directories and is idempotent", async () => {
         await accessor.mkdirp("/home/web_user/.cache/godot");
         await accessor.mkdirp("/home/web_user/.cache/godot");

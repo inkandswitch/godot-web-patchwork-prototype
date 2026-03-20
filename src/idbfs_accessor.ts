@@ -55,6 +55,7 @@ export type IDBFSEntryIterator = (path: string, entry: IDBFSEntry) => void | Pro
 export interface IDBFSStore {
     listPaths(): Promise<string[]>;
     get(path: string): Promise<IDBFSEntry | null>;
+    getRecursive(path: string): Promise<Record<string, IDBFSEntry>>;
     getKind(path: string): Promise<IDBFSEntryKind | null>;
     isFile(path: string): Promise<boolean>;
     isDirectory(path: string): Promise<boolean>;
@@ -63,6 +64,7 @@ export interface IDBFSStore {
     putFile(path: string, entry: IDBFSWritableFileEntry): Promise<void>;
     putDirectory(path: string, entry: IDBFSWritableDirectoryEntry): Promise<void>;
     delete(path: string): Promise<void>;
+    deleteRecursive(path: string): Promise<void>;
     clear(): Promise<void>;
     putMany(entries: Record<string, IDBFSWritableEntry>): Promise<void>;
     deleteMany(paths: string[]): Promise<void>;
@@ -248,6 +250,21 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
         return directories;
     };
 
+    const normalizeRecursiveTarget = (path: string, operation: string): string => {
+        const normalized = normalizePath(path, operation).replace(/\/+/g, "/");
+        if (normalized === "/") {
+            return "/";
+        }
+        return normalized.replace(/\/$/, "");
+    };
+
+    const pathIsInTree = (candidatePath: string, treeRoot: string): boolean => {
+        if (treeRoot === "/") {
+            return candidatePath.startsWith("/");
+        }
+        return candidatePath === treeRoot || candidatePath.startsWith(`${treeRoot}/`);
+    };
+
     const accessor: IDBFSStore = {
         async listPaths(): Promise<string[]> {
             return withStore("readonly", "listPaths", async (store) => {
@@ -259,6 +276,31 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
         async get(path: string): Promise<IDBFSEntry | null> {
             const normalizedPath = normalizePath(path, "get");
             return withStore("readonly", "get", async (store) => getEntryOrNull(store, normalizedPath, "get"));
+        },
+
+        async getRecursive(path: string): Promise<Record<string, IDBFSEntry>> {
+            const targetPath = normalizeRecursiveTarget(path, "getRecursive");
+            return withStore("readonly", "getRecursive", async (store) => {
+                const targetEntry = await getEntryOrNull(store, targetPath, "getRecursive");
+                if (targetEntry === null) {
+                    return {};
+                }
+
+                if (targetEntry.kind === "file") {
+                    return { [targetPath]: targetEntry };
+                }
+
+                const results: Record<string, IDBFSEntry> = {};
+                let cursor = await store.openCursor();
+                while (cursor) {
+                    const currentPath = String(cursor.key);
+                    if (pathIsInTree(currentPath, targetPath)) {
+                        results[currentPath] = decodeEntry(cursor.value, "getRecursive");
+                    }
+                    cursor = await cursor.continue();
+                }
+                return results;
+            });
         },
 
         async getKind(path: string): Promise<IDBFSEntryKind | null> {
@@ -323,6 +365,35 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
             const normalizedPath = normalizePath(path, "delete");
             return withStore("readwrite", "delete", async (store) => {
                 await store.delete(normalizedPath);
+            });
+        },
+
+        async deleteRecursive(path: string): Promise<void> {
+            const targetPath = normalizeRecursiveTarget(path, "deleteRecursive");
+            return withStore("readwrite", "deleteRecursive", async (store) => {
+                const targetEntry = await getEntryOrNull(store, targetPath, "deleteRecursive");
+                if (targetEntry === null) {
+                    return;
+                }
+
+                if (targetEntry.kind === "file") {
+                    await store.delete(targetPath);
+                    return;
+                }
+
+                const keysToDelete: string[] = [];
+                let cursor = await store.openCursor();
+                while (cursor) {
+                    const currentPath = String(cursor.key);
+                    if (pathIsInTree(currentPath, targetPath)) {
+                        keysToDelete.push(currentPath);
+                    }
+                    cursor = await cursor.continue();
+                }
+
+                for (const key of keysToDelete) {
+                    await store.delete(key);
+                }
             });
         },
 
