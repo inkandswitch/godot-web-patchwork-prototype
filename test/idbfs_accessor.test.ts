@@ -45,19 +45,104 @@ describe("IDBFS accessor", () => {
         }
     });
 
+    it("treats entries without contents as directories", async () => {
+        const rawDb = await openDB(dbName);
+        const tx = rawDb.transaction("FILE_DATA", "readwrite");
+        await tx.store.put(
+            {
+                timestamp: "2026-03-20T19:39:30.291Z",
+                mode: 16893,
+            },
+            "/home/web_user/.cache",
+        );
+        await tx.done;
+        rawDb.close();
+
+        const entry = await accessor.get("/home/web_user/.cache");
+        expect(entry).not.toBeNull();
+        expect(entry?.kind).toBe("directory");
+        expect(entry?.contents).toBeUndefined();
+        await expect(accessor.getKind("/home/web_user/.cache")).resolves.toBe("directory");
+    });
+
     it("roundtrips binary data and normalizes timestamp to Date", async () => {
         const bytes = new Uint8Array([1, 2, 3, 4]);
         await accessor.put("/home/web_user/example.bin", {
             timestamp: "2026-03-20T19:39:46.208Z",
             mode: 33188,
+            kind: "file",
             contents: bytes.buffer,
         });
 
         const roundtrip = await accessor.get("/home/web_user/example.bin");
         expect(roundtrip).not.toBeNull();
+        expect(roundtrip?.kind).toBe("file");
         expect(roundtrip?.timestamp).toBeInstanceOf(Date);
         expect(roundtrip?.mode).toBe(33188);
         expect(Array.from(new Uint8Array(roundtrip?.contents ?? new ArrayBuffer(0)))).toEqual(Array.from(bytes));
+    });
+
+    it("writes directory entries without contents", async () => {
+        await accessor.putDirectory("/home/web_user/.cache", {
+            timestamp: Date.now(),
+            mode: 16893,
+        });
+
+        const entry = await accessor.get("/home/web_user/.cache");
+        expect(entry?.kind).toBe("directory");
+        expect(entry?.contents).toBeUndefined();
+    });
+
+    it("writes file entries with explicit file kind", async () => {
+        await accessor.putFile("/home/web_user/example.bin", {
+            timestamp: "2026-03-20T19:39:46.208Z",
+            mode: 33188,
+            contents: new Uint8Array([1, 2, 3]).buffer,
+        });
+
+        const entry = await accessor.get("/home/web_user/example.bin");
+        expect(entry?.kind).toBe("file");
+        expect(Array.from(new Uint8Array(entry?.contents ?? new ArrayBuffer(0)))).toEqual([1, 2, 3]);
+    });
+
+    it("exposes isFile/isDirectory helpers", async () => {
+        await accessor.putFile("/home/web_user/example.bin", {
+            timestamp: "2026-03-20T19:39:46.208Z",
+            mode: 33188,
+            contents: new Uint8Array([1]).buffer,
+        });
+        await accessor.putDirectory("/home/web_user/.cache", {
+            timestamp: "2026-03-20T19:39:30.291Z",
+            mode: 16893,
+        });
+
+        await expect(accessor.isFile("/home/web_user/example.bin")).resolves.toBe(true);
+        await expect(accessor.isDirectory("/home/web_user/example.bin")).resolves.toBe(false);
+        await expect(accessor.isDirectory("/home/web_user/.cache")).resolves.toBe(true);
+        await expect(accessor.isFile("/home/web_user/.cache")).resolves.toBe(false);
+        await expect(accessor.isFile("/home/web_user/missing")).resolves.toBe(false);
+        await expect(accessor.isDirectory("/home/web_user/missing")).resolves.toBe(false);
+    });
+
+    it("rejects directory entries that include contents", async () => {
+        await expect(
+            accessor.put("/home/web_user/.cache", {
+                timestamp: Date.now(),
+                mode: 16893,
+                kind: "directory",
+                contents: new Uint8Array([1]).buffer,
+            }),
+        ).rejects.toBeInstanceOf(IDBFSAccessorError);
+    });
+
+    it("rejects file entries missing contents", async () => {
+        await expect(
+            accessor.put("/home/web_user/file_without_data", {
+                timestamp: Date.now(),
+                mode: 33188,
+                kind: "file",
+            }),
+        ).rejects.toBeInstanceOf(IDBFSAccessorError);
     });
 
     it("keeps listPaths stable and sorted", async () => {
@@ -65,11 +150,13 @@ describe("IDBFS accessor", () => {
             "/home/web_user/b.txt": {
                 timestamp: Date.now(),
                 mode: 33188,
+                kind: "file",
                 contents: new Uint8Array([10]).buffer,
             },
             "/home/web_user/a.txt": {
                 timestamp: new Date(),
                 mode: 33188,
+                kind: "file",
                 contents: new Uint8Array([20]).buffer,
             },
         });
@@ -85,10 +172,13 @@ describe("IDBFS accessor", () => {
             "/home/web_user/a.txt": {
                 timestamp: "2026-03-20T19:39:46.208Z",
                 mode: 33188,
+                kind: "file",
+                contents: new Uint8Array([1]).buffer,
             },
-            "/home/web_user/b.txt": {
+            "/home/web_user/.cache": {
                 timestamp: "2026-03-20T19:39:46.208Z",
-                mode: 33188,
+                mode: 16893,
+                kind: "directory",
             },
         });
 
@@ -96,11 +186,12 @@ describe("IDBFS accessor", () => {
         await accessor.forEachEntry((path, entry) => {
             visited.push(path);
             expect(entry.timestamp).toBeInstanceOf(Date);
+            expect(["file", "directory"]).toContain(entry.kind);
         });
 
         expect(visited.sort((a, b) => a.localeCompare(b))).toEqual([
+            "/home/web_user/.cache",
             "/home/web_user/a.txt",
-            "/home/web_user/b.txt",
         ]);
     });
 
@@ -110,11 +201,13 @@ describe("IDBFS accessor", () => {
                 "/home/web_user/ok-then-rollback.bin": {
                     timestamp: new Date(),
                     mode: 33188,
+                    kind: "file",
                     contents: new Uint8Array([9]).buffer,
                 },
                 "/home/web_user/bad.bin": {
                     timestamp: new Date(),
                     mode: Number.NaN,
+                    kind: "file",
                     contents: new Uint8Array([8]).buffer,
                 },
             }),
@@ -128,40 +221,46 @@ describe("IDBFS accessor", () => {
             "/home/web_user/example.bin": {
                 timestamp: Date.now(),
                 mode: 33188,
+                kind: "file",
+                contents: new Uint8Array([1]).buffer,
             },
             "/home/web_user/a.txt": {
                 timestamp: Date.now(),
                 mode: 33188,
+                kind: "file",
+                contents: new Uint8Array([2]).buffer,
             },
-            "/home/web_user/b.txt": {
+            "/home/web_user/.cache": {
                 timestamp: Date.now(),
-                mode: 33188,
+                mode: 16893,
+                kind: "directory",
             },
         });
 
         await accessor.delete("/home/web_user/example.bin");
         await expect(accessor.get("/home/web_user/example.bin")).resolves.toBeNull();
 
-        await accessor.deleteMany(["/home/web_user/a.txt", "/home/web_user/b.txt"]);
+        await accessor.deleteMany(["/home/web_user/a.txt", "/home/web_user/.cache"]);
         await expect(accessor.listPaths()).resolves.toEqual([]);
     });
 
-    it("updates timestamp with touch", async () => {
-        await accessor.put("/home/web_user/example.bin", {
-            timestamp: "2026-03-20T19:39:46.208Z",
-            mode: 33188,
-            contents: new Uint8Array([1]).buffer,
+    it("keeps directory kind on touch", async () => {
+        await accessor.putDirectory("/home/web_user/.cache", {
+            timestamp: "2026-03-20T19:39:30.291Z",
+            mode: 16893,
         });
 
-        await accessor.touch("/home/web_user/example.bin", "2026-03-21T00:00:00.000Z");
-        const touched = await accessor.get("/home/web_user/example.bin");
-        expect(touched?.timestamp.toISOString()).toBe("2026-03-21T00:00:00.000Z");
+        await accessor.touch("/home/web_user/.cache", "2026-03-21T00:00:00.000Z");
+        const entry = await accessor.get("/home/web_user/.cache");
+        expect(entry?.kind).toBe("directory");
+        expect(entry?.contents).toBeUndefined();
+        expect(entry?.timestamp.toISOString()).toBe("2026-03-21T00:00:00.000Z");
     });
 
     it("rejects malformed persisted timestamp values", async () => {
         const rawDb = await openDB(dbName);
         const tx = rawDb.transaction("FILE_DATA", "readwrite");
-        await tx.store.put({ timestamp: "not-a-date", mode: 33188 }, "/home/web_user/invalid.ts");
+        await tx.store.put({ timestamp: "not-a-date", mode: 33188, content: new Uint8Array([1]).buffer }, "/home/web_user/invalid.ts");
         await tx.done;
         rawDb.close();
 

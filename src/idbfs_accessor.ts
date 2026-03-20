@@ -6,6 +6,7 @@ interface IDBFSPersistedEntry {
     timestamp: Date | number | string;
     mode: number;
     contents?: ArrayBuffer;
+    content?: ArrayBuffer;
 }
 
 interface IDBFSDatabaseSchema extends DBSchema {
@@ -21,13 +22,28 @@ interface IDBFSDatabaseSchema extends DBSchema {
 export interface IDBFSEntry {
     timestamp: Date;
     mode: number;
+    kind: IDBFSEntryKind;
     contents?: ArrayBuffer;
 }
+
+export type IDBFSEntryKind = "file" | "directory";
 
 export interface IDBFSWritableEntry {
     timestamp: Date | number | string;
     mode: number;
-    contents?: ArrayBuffer;
+    kind?: IDBFSEntryKind;
+    contents?: ArrayBuffer | ArrayBufferView;
+}
+
+export interface IDBFSWritableFileEntry {
+    timestamp: Date | number | string;
+    mode: number;
+    contents: ArrayBuffer | ArrayBufferView;
+}
+
+export interface IDBFSWritableDirectoryEntry {
+    timestamp: Date | number | string;
+    mode: number;
 }
 
 export interface CreateIDBFSAccessorOptions {
@@ -39,7 +55,12 @@ export type IDBFSEntryIterator = (path: string, entry: IDBFSEntry) => void | Pro
 export interface IDBFSStore {
     listPaths(): Promise<string[]>;
     get(path: string): Promise<IDBFSEntry | null>;
+    getKind(path: string): Promise<IDBFSEntryKind | null>;
+    isFile(path: string): Promise<boolean>;
+    isDirectory(path: string): Promise<boolean>;
     put(path: string, entry: IDBFSWritableEntry): Promise<void>;
+    putFile(path: string, entry: IDBFSWritableFileEntry): Promise<void>;
+    putDirectory(path: string, entry: IDBFSWritableDirectoryEntry): Promise<void>;
     delete(path: string): Promise<void>;
     clear(): Promise<void>;
     putMany(entries: Record<string, IDBFSWritableEntry>): Promise<void>;
@@ -162,21 +183,49 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
         const persisted = value as Partial<IDBFSPersistedEntry>;
         const timestamp = normalizeTimestamp(persisted.timestamp, operation);
         const mode = normalizeMode(persisted.mode, operation);
-        const contents = normalizeContents(persisted.contents, operation);
-        return { timestamp, mode, contents };
+        const contents = normalizeContents(persisted.contents ?? persisted.content, operation);
+        const kind: IDBFSEntryKind = contents === undefined ? "directory" : "file";
+        return { timestamp, mode, kind, contents };
     };
 
     const encodeEntry = (entry: IDBFSWritableEntry, operation: string): IDBFSPersistedEntry => {
         const timestamp = normalizeTimestamp(entry.timestamp, operation).toISOString();
         const mode = normalizeMode(entry.mode, operation);
         const contents = normalizeContents(entry.contents, operation);
+        const kind: IDBFSEntryKind = entry.kind ?? (contents === undefined ? "directory" : "file");
 
-        return {
+        if (kind === "directory" && contents !== undefined) {
+            throw new IDBFSAccessorError(operation, dbName, storeName, "Directory entries must not contain contents");
+        }
+
+        if (kind === "file" && contents === undefined) {
+            throw new IDBFSAccessorError(operation, dbName, storeName, "File entries must include contents");
+        }
+
+        const encoded: IDBFSPersistedEntry = {
             timestamp,
             mode,
-            // Write both keys to remain compatible with existing Godot IDBFS formats.
-            contents,
         };
+
+        if (kind === "file") {
+            // Write both keys to remain compatible with existing Godot IDBFS formats.
+            encoded.contents = contents;
+            encoded.content = contents;
+        }
+
+        return encoded;
+    };
+
+    const getEntryOrNull = async (store: any, path: string, operation: string): Promise<IDBFSEntry | null> => {
+        const value = await store.get(path);
+        if (value === undefined) {
+            return null;
+        }
+        return decodeEntry(value, operation);
+    };
+
+    const putEntry = async (store: any, path: string, entry: IDBFSWritableEntry, operation: string): Promise<void> => {
+        await store.put(encodeEntry(entry, operation), path);
     };
 
     const accessor: IDBFSStore = {
@@ -189,20 +238,35 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
 
         async get(path: string): Promise<IDBFSEntry | null> {
             const normalizedPath = normalizePath(path, "get");
-            return withStore("readonly", "get", async (store) => {
-                const value = await store.get(normalizedPath);
-                if (value === undefined) {
-                    return null;
-                }
-                return decodeEntry(value, "get");
-            });
+            return withStore("readonly", "get", async (store) => getEntryOrNull(store, normalizedPath, "get"));
+        },
+
+        async getKind(path: string): Promise<IDBFSEntryKind | null> {
+            const entry = await accessor.get(path);
+            return entry?.kind ?? null;
+        },
+
+        async isFile(path: string): Promise<boolean> {
+            return (await accessor.getKind(path)) === "file";
+        },
+
+        async isDirectory(path: string): Promise<boolean> {
+            return (await accessor.getKind(path)) === "directory";
         },
 
         async put(path: string, entry: IDBFSWritableEntry): Promise<void> {
             const normalizedPath = normalizePath(path, "put");
             return withStore("readwrite", "put", async (store) => {
-                await store.put(encodeEntry(entry, "put"), normalizedPath);
+                await putEntry(store, normalizedPath, entry, "put");
             });
+        },
+
+        async putFile(path: string, entry: IDBFSWritableFileEntry): Promise<void> {
+            return accessor.put(path, { ...entry, kind: "file" });
+        },
+
+        async putDirectory(path: string, entry: IDBFSWritableDirectoryEntry): Promise<void> {
+            return accessor.put(path, { ...entry, kind: "directory" });
         },
 
         async delete(path: string): Promise<void> {
@@ -222,7 +286,7 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
             return withStore("readwrite", "putMany", async (store) => {
                 for (const [path, entry] of Object.entries(entries)) {
                     const normalizedPath = normalizePath(path, "putMany");
-                    await store.put(encodeEntry(entry, "putMany"), normalizedPath);
+                    await putEntry(store, normalizedPath, entry, "putMany");
                 }
             });
         },
@@ -259,30 +323,30 @@ export function createIDBFSAccessor(dbName: string, opts: CreateIDBFSAccessorOpt
             return withStore("readwrite", "touch", async (store) => {
                 const existing = await store.get(normalizedPath);
                 if (existing === undefined) {
-                    await store.put(
-                        encodeEntry(
-                            {
-                                timestamp,
-                                mode: 33188,
-                                contents: new Uint8Array([]).buffer,
-                            },
-                            "touch",
-                        ),
+                    await putEntry(
+                        store,
                         normalizedPath,
+                        {
+                            timestamp,
+                            mode: 33188,
+                            kind: "file",
+                            contents: new Uint8Array([]).buffer,
+                        },
+                        "touch",
                     );
                     return;
                 }
                 const decoded = decodeEntry(existing, "touch");
-                await store.put(
-                    encodeEntry(
-                        {
-                            timestamp,
-                            mode: decoded.mode,
-                            contents: decoded.contents,
-                        },
-                        "touch",
-                    ),
+                await putEntry(
+                    store,
                     normalizedPath,
+                    {
+                        timestamp,
+                        mode: decoded.mode,
+                        kind: decoded.kind,
+                        contents: decoded.contents,
+                    },
+                    "touch",
                 );
             });
         },

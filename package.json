@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:idbfs": "vitest run src/test/idbfs_accessor.test.ts"
+    "test:idbfs": "vitest run test/idbfs_accessor.test.ts"
   },
   "dependencies": {
     "idb": "^8.0.3",
