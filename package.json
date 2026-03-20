@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:idbfs": "node --import tsx src/test/test_idbfs_accessor.ts"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:idbfs": "vitest run src/test/idbfs_accessor.test.ts"
   },
   "dependencies": {
     "idb": "^8.0.3",
@@ -15,8 +17,8 @@
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
-    "tsx": "^4.21.0",
     "typescript": "^5.7.3",
-    "vite": "^6"
+    "vite": "^6",
+    "vitest": "^4.1.0"
   }
 }
