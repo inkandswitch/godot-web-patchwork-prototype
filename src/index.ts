@@ -354,7 +354,10 @@ async function launch() {
       onPrintError: addToErrorLog
     });
 
+    console.log("Initializing import editor...");
+
     importEngine.init("godot.editor").then(() => {
+      console.log("Editor initalized!");
       for (const [filename, content] of files.entries()) {
         importEngine.copyToFS(`${PROJECT_PATH}/${filename.replace("res://", "")}`, content.buffer as ArrayBuffer);
       }
@@ -363,9 +366,11 @@ async function launch() {
           console.warn(`[patchwork] import pass timed out after ${IMPORT_TIMEOUT_MS / 1000}s, proceeding anyway`);
           done(0);
         }
-      }, IMPORT_TIMEOUT_MS);  
+      }, IMPORT_TIMEOUT_MS);
+
+      console.log("Starting import...");
       importEngine.start({
-        args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "--audio-driver", "Dummy", "-e", "--quit"],
+        args: ["--path", PROJECT_PATH, "--rendering-driver", "opengl3", "--display-driver", "headless", "--audio-driver", "Dummy", "-e", "--quit"],
         persistentDrops: false,
       });
     });
